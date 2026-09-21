@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "notifications-indicator",
+  "name": "Notification indicator",
+  "version": "1.0.0",
+  "author": "Omarchy",
+  "description": "Unread notification bell and history shortcut",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Notifications",
+    "description": "Unread notification count",
+    "category": "Info",
+    "allowMultiple": false
+  }
+}

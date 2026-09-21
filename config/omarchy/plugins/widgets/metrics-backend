@@ -1,0 +1,58 @@
+#!/bin/sh
+# Read-only metrics collector for the desktop cards. It returns exactly one
+# machine-readable line per call and never accepts user-provided input.
+set -u
+
+default_interface() {
+  ip -o route show default 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit }}'
+}
+
+case "${1:-}" in
+  cpu)
+    awk '/^cpu / { print; exit }' /proc/stat
+    ;;
+  net)
+    interface="$(default_interface)"
+    if [ -z "$interface" ]; then
+      for path in /sys/class/net/*; do
+        candidate="${path##*/}"
+        [ "$candidate" = "lo" ] && continue
+        [ -r "$path/operstate" ] && [ "$(cat "$path/operstate")" = "up" ] || continue
+        interface="$candidate"
+        break
+      done
+    fi
+    case "$interface" in
+      ""|*[!a-zA-Z0-9_.:-]*) exit 0 ;;
+    esac
+    base="/sys/class/net/$interface/statistics"
+    [ -r "$base/rx_bytes" ] && [ -r "$base/tx_bytes" ] || exit 0
+    speed=0
+    [ -r "/sys/class/net/$interface/speed" ] && speed="$(cat "/sys/class/net/$interface/speed" 2>/dev/null || printf 0)"
+    case "$speed" in ""|*[!0-9]*) speed=0 ;; esac
+    printf '%s %s %s %s\n' "$interface" "$(cat "$base/rx_bytes")" "$(cat "$base/tx_bytes")" "$speed"
+    ;;
+  gpu)
+    if command -v nvidia-smi >/dev/null 2>&1; then
+      nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader,nounits 2>/dev/null |
+        awk -F ',' 'NF >= 2 { gsub(/[[:space:]]/, "", $1); gsub(/[[:space:]]/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/) { print $1 "|" $2; exit } }'
+    elif [ -r /sys/class/drm/card0/device/gpu_busy_percent ]; then
+      printf '%s|0\n' "$(cat /sys/class/drm/card0/device/gpu_busy_percent)"
+    fi
+    ;;
+  temp)
+    # Prefer the AMD CPU package sensor (Tctl) over an arbitrary first hwmon
+    # entry, which on this system is the NVMe drive.
+    for directory in /sys/class/hwmon/hwmon*; do
+      [ -r "$directory/name" ] && [ "$(cat "$directory/name")" = "k10temp" ] || continue
+      [ -r "$directory/temp1_input" ] || continue
+      awk '{ printf "CPU|%.0f\n", $1 / 1000; exit }' "$directory/temp1_input"
+      exit 0
+    done
+    for path in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp1_input; do
+      [ -r "$path" ] || continue
+      awk '{ printf "System|%.0f\n", $1 / 1000; exit }' "$path"
+      exit 0
+    done
+    ;;
+esac

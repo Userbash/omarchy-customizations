@@ -1,0 +1,6 @@
+state/
+backups/
+screenshots/
+*.sqlite
+*.db
+*.log

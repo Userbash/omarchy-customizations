@@ -1,0 +1,18 @@
+#!/bin/sh
+# Fixed, read-only backend for health. No user input or state changes.
+set -eu
+c1=$(awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8, $5+$6; exit}' /proc/stat)
+sleep 0.15
+c2=$(awk '/^cpu / {print $2+$3+$4+$5+$6+$7+$8, $5+$6; exit}' /proc/stat)
+cpu=$(awk -v a="$c1" -v b="$c2" 'BEGIN { split(a,x); split(b,y); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt>0) printf "%.0f",100*(dt-di)/dt; else print 0 }')
+memory=$(awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2} END {if(t>0) printf "%.0f",(t-a)*100/t; else print 0}' /proc/meminfo)
+disk=$(df -P / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+temperature=0
+for f in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp*_input; do
+  if [ -r "$f" ]; then
+    value=$(awk '{v=$1/1000; if(v>0 && v<150) printf "%.0f",v}' "$f")
+    if [ -n "$value" ]; then temperature=$value; break; fi
+  fi
+done
+uptime=$(awk '{s=int($1); d=int(s/86400); h=int((s%86400)/3600); m=int((s%3600)/60); if(d>0) printf "%dd %02dh",d,h; else printf "%02dh %02dm",h,m}' /proc/uptime)
+printf '{"cpu":%s,"memory":%s,"disk":%s,"temperature":%s,"uptime":"%s"}\n' "$cpu" "$memory" "$disk" "$temperature" "$uptime"
