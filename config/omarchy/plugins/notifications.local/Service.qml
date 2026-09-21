@@ -94,7 +94,9 @@ Item {
 
   // How many notifications the history directory keeps, and therefore how
   // many `showHistory` can replay.
-  readonly property int historyLimit: 10
+  // Keep enough archived notifications for the bell menu to remain useful
+  // across a normal work session. The menu itself remains scrollable.
+  readonly property int historyLimit: 100
 
   readonly property int lowPopupDuration: 5000
   readonly property int normalPopupDuration: 6000

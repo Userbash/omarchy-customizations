@@ -21,8 +21,8 @@ A user-owned Omarchy and Hyprland setup for Quickshell. It keeps the desktop con
 - `health` — read-only CPU, memory, disk and temperature widget.
 - `weather` — weather bar widget and detail popup.
 - `clipboard.local` — clipboard history UI and capture helper.
-- `notifications.local` — D-Bus notification service with popup history.
-- `notifications-indicator` — right-side bell, unread badge and scrollable missed-notification menu.
+- `notifications.local` — D-Bus notification service with a 100-item on-disk history.
+- `notifications-indicator` — right-side bell, unread badge and a scrollable missed-notification menu.
 - `music-desktop` — music controls, visualizer configuration and animated asset.
 - `widgets` — weather, system, network and music cards on the desktop layer.
 - `config/omarchy/hooks/post-update.d/` — optional Omarchy post-update hooks.
@@ -64,6 +64,23 @@ Leave `OMARCHY_MONITOR` unset to keep Omarchy's automatic monitor configuration.
 ```
 
 The checks validate JSON manifests, shell syntax, notification D-Bus availability and the live notification-indicator geometry. Missing optional QML/E2E tools are reported as `SKIP`, never as false successes.
+
+## Notification bell
+
+The bell lives in the right side of the Omarchy bar, alongside the tray and
+system indicators. A colored badge appears when unread notifications exist.
+
+- Single-click the bell to open the unread-notification menu. Opening the menu
+  does not mark entries as read.
+- Scroll the list to review missed entries. Use the trash icon beside an entry
+  to delete only that notification.
+- Use the checkmark to mark every unread entry as read. Use the bottom trash
+  action to clear all saved notification history.
+- Double-click the bell to toggle Do Not Disturb. The same control is available
+  in the menu header. Critical notifications still follow the service policy.
+
+Notification data is stored under `~/.local/state/omarchy/notifications/` at
+runtime and is intentionally excluded from this repository.
 
 ## Uninstall
 
