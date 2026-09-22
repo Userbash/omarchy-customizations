@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "vpn-monitor",
+  "name": "VPN Monitor",
+  "version": "1.0.0",
+  "author": "Omarchy Customizations",
+  "description": "Local-only, read-only VPN status dashboard.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "VPN Monitor",
+    "description": "Open the read-only VPN dashboard",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

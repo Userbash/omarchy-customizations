@@ -1,42 +1,141 @@
 # Omarchy Customizations
 
-A user-owned Omarchy and Hyprland setup for Quickshell. It keeps the desktop configuration in one portable repository and never edits `/usr/share/omarchy`.
+Personal, user-owned customizations for Omarchy and Hyprland. This repository
+contains the configuration, Quickshell plugins, and a small local monitoring
+service used by the panel. It never modifies `/usr/share/omarchy`; all changes
+are installed under the user's home directory.
 
 ![Omarchy desktop demo](docs/media/omarchy-demo.gif)
 
-## What is included
+## What This Repository Provides
 
-### Hyprland
+### Hyprland configuration
 
 `config/hypr/` contains the Lua configuration loaded by Omarchy:
 
-- keybindings and application shortcuts;
-- input and appearance settings;
-- optional monitor configuration through `OMARCHY_MONITOR` and `OMARCHY_SCALE`;
+- keyboard shortcuts and application bindings;
+- input, appearance, animation, and layer rules;
+- optional monitor and scale overrides through `OMARCHY_MONITOR` and
+  `OMARCHY_SCALE`;
 - startup hooks and Omarchy defaults;
-- the custom glass layer rule for the desktop cards.
+- the glass layer used by the desktop widgets.
 
-### Omarchy shell and plugins
+The configuration is expressed as Omarchy-compatible user files, so package
+updates do not overwrite it.
 
-- `health` — read-only CPU, memory, disk and temperature widget.
-- `weather` — weather bar widget and detail popup.
-- `clipboard.local` — clipboard history UI and capture helper.
-- `notifications.local` — D-Bus notification service with a 100-item on-disk history.
-- `notifications-indicator` — right-side bell, unread badge and a scrollable missed-notification menu.
-- `music-desktop` — music controls, visualizer configuration and animated asset.
-- `widgets` — weather, system, network and music cards on the desktop layer.
-- `config/omarchy/hooks/post-update.d/` — optional Omarchy post-update hooks.
+### Omarchy bar and desktop plugins
+
+All plugins are regular Quickshell components. They use the existing Omarchy
+theme, spacing, icon, and popup primitives instead of replacing the shell.
+
+#### `health`
+
+Read-only CPU, memory, disk, and temperature information. It is a compact bar
+indicator with a detail view and does not change system state.
+
+#### `weather`
+
+Weather status in the bar with a detail popup. Network and formatting logic are
+kept separate from the visual component and follow the panel's layout rules.
+
+#### `clipboard.local`
+
+Local clipboard history with a capture helper. History stays on the machine and
+is not committed to the repository. Sensitive clipboard entries are filtered
+using the existing desktop metadata conventions.
+
+#### `notifications.local` and `notifications-indicator`
+
+The notification service receives D-Bus notifications, stores a bounded local
+history, handles Do Not Disturb, and exposes the unread bell in the bar. The
+indicator supports opening history, marking notifications read, and clearing
+entries. Runtime history lives below `~/.local/state/omarchy/notifications/`
+and is excluded from version control.
+
+#### `music-desktop` and `widgets`
+
+Desktop-layer widgets for music, weather, network, system metrics, and the
+visualizer. They are click-through where appropriate and use the Omarchy glass
+surface without adding a separate window-manager layer.
+
+#### `omarchy.bluetooth`
+
+The stock Omarchy Bluetooth panel remains enabled. It is the control surface for
+Bluetooth and provides adapter power on/off, active discovery, device search,
+pairing, connection and disconnection, forgetting paired devices, keyboard
+navigation, and accessible action feedback.
+
+This repository does not replace that panel with a custom Bluetooth command
+runner.
+
+#### `bluetooth-battery`
+
+A separate, read-only charge indicator placed beside the stock Bluetooth
+control. It keeps the charge percentage visible without taking away pairing or
+connection controls.
+
+BlueZ D-Bus is preferred, UPower is a fallback, and an unavailable percentage
+is shown as unknown rather than as a misleading `0%`. The widget supports
+device classification, charging state, and severity colors. It never runs
+`bluetoothctl` or other system commands from QML.
+
+#### `vpn-monitor`
+
+A compact VPN status and diagnostics notification for the right side of the
+bar. It displays the selected client's connection state, interface, external
+IP, country, WARP status, latency, HTTP checks, traffic counters, and speed
+test results.
+
+The frontend consumes JSON from the local API and sends actions back to that
+API. It does not inspect processes, routes, network interfaces, or VPN
+configuration itself. Diagnostic buttons have independent busy states, so a
+running ping does not disable the speed test and vice versa. Background status
+polling does not make controls flicker.
+
+VPN detection is conservative. A process alone is not considered a connected
+VPN. The monitor combines client presence, interface state, IP assignment,
+routes, handshake information where available, and an internet or proxy probe.
+Supported detection profiles include WireGuard, OpenVPN, AmneziaVPN,
+AmneziaWG, Outline, Cloudflare WARP, and the local Throne profile. VPN control
+adapters are not enabled unless a documented safe adapter is configured; the
+default installation is read-only.
+
+### Local backend
+
+`backend/vpn_monitor/` is the Python service used by the VPN and Bluetooth
+plugins. It listens only on `127.0.0.1:8765` and provides:
+
+- `GET /health`;
+- `GET /api/v1/status`;
+- `GET /api/v1/vpn/clients`;
+- `GET /api/v1/bluetooth/status`;
+- `POST /api/v1/diagnostics/connectivity`;
+- `POST /api/v1/diagnostics/speed-test`;
+- speed-test status and cancellation endpoints;
+- selected-client settings.
+
+System state is read through structured Linux interfaces and bounded commands.
+Counters and diagnostics are kept in memory; the selected-client preference is
+stored in the user's local state directory. There are no credentials, VPN
+keys, tokens, or passwords in the service.
+
+The user unit is `config/systemd/user/omarchy-vpn-monitor.service`. It uses
+systemd's `%h` home-directory specifier and is portable across user names and
+installations.
 
 ## Requirements
 
-- Omarchy with Hyprland;
-- Quickshell;
-- `bash`, `jq`, `notify-send`, `hyprctl` and `omarchy-shell`;
-- optional: `qmllint`, `qmltestrunner`, `wtype` for deeper QML/E2E checks.
+- Omarchy with Hyprland and Quickshell;
+- Python 3.11 or newer for the optional monitor service;
+- `bash`, `jq`, `notify-send`, `hyprctl`, and `omarchy-shell`;
+- BlueZ for Bluetooth discovery and battery data;
+- UPower is recommended as a battery fallback, but is not required;
+- optional: `qmllint`, `qmltestrunner`, and `wtype` for deeper QML and E2E
+  checks.
 
-## Install
+## Installation
 
-Run from the repository root:
+From the repository root:
 
 ```bash
 ./scripts/check.sh
@@ -44,9 +143,22 @@ Run from the repository root:
 ./scripts/smoke.sh
 ```
 
-`install.sh` backs up the current `~/.config/hypr` and `~/.config/omarchy/shell.json` before copying files. It installs only user-owned files and then reloads Hyprland and the Omarchy shell.
+`install.sh` creates a timestamped backup of the current Hyprland and Omarchy
+shell configuration, installs user plugins, copies the Python backend, installs
+the systemd user unit, reloads the unit files, and starts the monitor. It then
+reloads the Omarchy shell and Hyprland where available.
 
-To select a monitor override before installation:
+The installer writes only to user-owned locations:
+
+```text
+~/.config/hypr/
+~/.config/omarchy/
+~/.config/systemd/user/
+~/.local/share/omarchy/vpn-monitor/
+~/.local/state/omarchy/
+```
+
+Monitor overrides can be supplied before installation:
 
 ```bash
 export OMARCHY_MONITOR=DP-1
@@ -54,33 +166,43 @@ export OMARCHY_SCALE=1.0
 ./scripts/install.sh
 ```
 
-Leave `OMARCHY_MONITOR` unset to keep Omarchy's automatic monitor configuration.
+Leave these variables unset to use Omarchy's automatic monitor setup.
 
 ## Verification
+
+Run the repository checks after installation:
 
 ```bash
 ./scripts/check.sh
 ./scripts/smoke.sh
+systemctl --user status omarchy-vpn-monitor.service
+curl http://127.0.0.1:8765/health
 ```
 
-The checks validate JSON manifests, shell syntax, notification D-Bus availability and the live notification-indicator geometry. Missing optional QML/E2E tools are reported as `SKIP`, never as false successes.
+The checks validate JSON manifests, shell syntax, backend compilation, the
+local notification path, and panel geometry. Optional QML tools are reported
+as `SKIP` when they are not installed; they are never treated as passing tests.
+The backend contract tests can be run against this checkout with:
 
-## Notification bell
+```bash
+PYTHONPATH=backend python -m unittest discover -s tests -q
+```
 
-The bell lives in the right side of the Omarchy bar, alongside the tray and
-system indicators. A colored badge appears when unread notifications exist.
+The repository does not include live VPN control tests. Those require a
+separate disposable VPN profile and could otherwise interrupt an active
+connection.
 
-- Single-click the bell to open the unread-notification menu. Opening the menu
-  does not mark entries as read.
-- Scroll the list to review missed entries. Use the trash icon beside an entry
-  to delete only that notification.
-- Use the checkmark to mark every unread entry as read. Use the bottom trash
-  action to clear all saved notification history.
-- Double-click the bell to toggle Do Not Disturb. The same control is available
-  in the menu header. Critical notifications still follow the service policy.
+## Privacy and portability
 
-Notification data is stored under `~/.local/state/omarchy/notifications/` at
-runtime and is intentionally excluded from this repository.
+This repository contains no credentials, private keys, tokens, passwords,
+notification databases, screenshots, or machine-specific home-directory
+paths. Runtime state is generated locally and ignored by Git. The only
+network-facing service is the loopback monitor on `127.0.0.1:8765`.
+
+The backend discovers the optional Throne client through `PATH` and process
+metadata; it does not depend on a particular user's home directory. Bluetooth
+and VPN data are read from the local machine and are not uploaded by these
+plugins.
 
 ## Uninstall
 
@@ -88,11 +210,9 @@ runtime and is intentionally excluded from this repository.
 ./scripts/uninstall.sh
 ```
 
-The uninstall script moves installed plugin directories into a timestamped backup. It does not delete notification or clipboard history.
-
-## Privacy and portability
-
-The repository contains no state databases, notification history, screenshots, credentials, tokens or home-directory paths. Personal machine details are supplied through environment variables or Omarchy's own defaults. Review local changes before publishing a fork.
+The uninstall script moves installed custom plugin directories into a
+timestamped backup. It does not delete notification history or other user
+state.
 
 ## License
 

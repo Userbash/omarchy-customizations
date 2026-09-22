@@ -1,0 +1,28 @@
+[Unit]
+Description=Omarchy VPN Monitor (read-only local API)
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=%h/.local/share/omarchy/vpn-monitor
+ExecStart=/usr/bin/python3 -m vpn_monitor.service
+Restart=on-failure
+RestartSec=3
+UMask=0077
+StateDirectory=omarchy/vpn-monitor
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state/omarchy
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=default.target

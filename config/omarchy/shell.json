@@ -50,6 +50,12 @@
           "id": "omarchy.bluetooth"
         },
         {
+          "id": "bluetooth-battery"
+        },
+        {
+          "id": "vpn-monitor"
+        },
+        {
           "id": "omarchy.network"
         },
         {
