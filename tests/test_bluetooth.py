@@ -67,6 +67,15 @@ class FakeTransport:
 
 
 class BluetoothServiceTests(unittest.TestCase):
+    @patch("vpn_monitor.bluetooth.time.monotonic")
+    def test_snapshot_cache_avoids_repeated_dbus_reads(self, monotonic):
+        monotonic.side_effect = [100.0, 100.5]
+        transport = FakeTransport({"/org/bluez/hci0": {"org.bluez.Adapter1": {"Powered": True}}})
+        service = BluetoothBatteryService(transport, poll_interval_seconds=3)
+        first = service.snapshot()
+        second = service.snapshot()
+        self.assertEqual(first, second)
+
     def test_snapshot_filters_disconnected_devices_and_reports_adapter_power(self):
         objects = {
             "/org/bluez/hci0": {"org.bluez.Adapter1": {"Powered": {"type": "b", "data": True}}},

@@ -178,8 +178,6 @@ Item {
     // captured for the popup card.
     notification.tracked = true
     var snapshot = snapshotOf(notification)
-    service.unreadTotal += 1
-    service.persistUnread()
     liveRefs[snapshot.originalId] = notification
     // Guard the delete: a newer notification may have reused this originalId
     // (freedesktop replaces_id) and taken over the map slot.
@@ -196,6 +194,8 @@ Item {
       // can leave is a history entry. Write it straight into history —
       // "what did I miss while silenced" is exactly what history is for.
       if (!isEphemeral(notification)) {
+        service.unreadTotal += 1
+        service.persistUnread()
         writeSilenced(notification, snapshot)
         return
       }
@@ -204,6 +204,8 @@ Item {
       return
     }
 
+    service.unreadTotal += 1
+    service.persistUnread()
     persistPopupFile(snapshot)
     watchForUpdates(notification, snapshot)
     // Qt.callLater avoids "QV4::Object::insertMember" crashes when a

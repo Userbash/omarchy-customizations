@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 
 
@@ -169,13 +170,20 @@ class BusctlTransport:
 @dataclass
 class BluetoothBatteryService:
     transport: object
-    poll_interval_seconds: int = 90
+    poll_interval_seconds: int = 3
     include_disconnected: bool = False
+    _last_snapshot: dict | None = None
+    _last_snapshot_at: float = 0.0
 
     def snapshot(self):
+        now = time.monotonic()
+        if self._last_snapshot is not None and now - self._last_snapshot_at < self.poll_interval_seconds:
+            return deepcopy(self._last_snapshot)
         try:
             objects = self.transport.managed_objects()
         except Exception:
+            if self._last_snapshot is not None:
+                return deepcopy(self._last_snapshot)
             return {"adapterPowered": False, "updatedAt": int(time.time()), "devices": []}
         adapters = [interfaces.get(ADAPTER1, {}) for interfaces in objects.values() if ADAPTER1 in interfaces]
         adapter_powered = any(bool(_prop(adapter, "Powered", False)) for adapter in adapters)
@@ -196,4 +204,7 @@ class BluetoothBatteryService:
                 continue
             devices.append(normalize_device(path, props, interfaces.get(BATTERY1, {}), upower))
         devices.sort(key=lambda item: (not item["connected"], not item["batteryKnown"], item["type"], item["name"].casefold()))
-        return {"adapterPowered": adapter_powered, "updatedAt": int(time.time()), "devices": devices}
+        result = {"adapterPowered": adapter_powered, "updatedAt": int(time.time()), "devices": devices}
+        self._last_snapshot = result
+        self._last_snapshot_at = now
+        return deepcopy(result)

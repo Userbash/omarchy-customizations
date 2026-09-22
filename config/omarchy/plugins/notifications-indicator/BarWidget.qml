@@ -315,6 +315,7 @@ BarWidget {
         }
 
         delegate: Item {
+          required property int index
           required property string summary
           required property string body
           required property string filePath
