@@ -80,7 +80,9 @@ def is_game_client(client: dict, cmdline: str = "") -> bool:
 def choose_game(clients: list[dict], monitors: list[dict], cmdline_for_pid: Callable[[int], str]) -> Decision:
     rectangles = monitor_rectangles(monitors)
     for client in clients:
-        if int(client.get("fullscreen", 0) or 0) != 1:
+        # Hyprland uses 1 for legacy fullscreen and 2 for fullscreen-with-client
+        # state. Both mean the client owns the monitor for this purpose.
+        if int(client.get("fullscreen", 0) or 0) < 1:
             continue
         pid = int(client.get("pid", 0) or 0)
         cmdline = cmdline_for_pid(pid) if pid else ""

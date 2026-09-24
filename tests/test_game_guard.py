@@ -37,6 +37,11 @@ class GuardTests(unittest.TestCase):
         result = guard.choose_game([game(fullscreen=0, size=[1280, 720])], MONITORS, lambda pid: "Bodycam.exe")
         self.assertFalse(result.active)
 
+    def test_hyprland_fullscreen_client_state_two_is_detected(self):
+        monitors = [{"x": 0, "y": 0, "width": 2560, "height": 1440, "scale": 1.25}]
+        result = guard.choose_game([game(fullscreen=2, size=[2048, 1152])], monitors, lambda pid: "Bodycam-Win64-Shipping.exe")
+        self.assertTrue(result.active)
+
     def test_fullscreen_desktop_app_is_not_detected(self):
         result = guard.choose_game([game(**{"class": "brave-browser", "title": "Bodycam trailer"})], MONITORS, lambda pid: "")
         self.assertFalse(result.active)
