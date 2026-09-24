@@ -1,0 +1,62 @@
+#!/bin/sh
+# Read-only KVM/VPN probe. It does not start, stop, or reconfigure anything.
+set -u
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+kvm_device=0
+[ -e /dev/kvm ] && kvm_device=1
+kvm_amd=0
+kvm_intel=0
+grep -qw kvm_amd /proc/modules 2>/dev/null && kvm_amd=1
+grep -qw kvm_intel /proc/modules 2>/dev/null && kvm_intel=1
+
+# Count processes that can hold /dev/kvm. The process scan is deliberately
+# bounded to /proc and does not require lsof or elevated privileges.
+vm_count=0
+vm_names=""
+for proc in /proc/[0-9]*; do
+  [ -r "$proc/comm" ] || continue
+  comm=$(cat "$proc/comm" 2>/dev/null || true)
+  case "$comm" in
+    qemu-system-*|qemu-kvm|cloud-hypervisor|firecracker|crosvm)
+      vm_count=$((vm_count + 1))
+      [ -n "$vm_names" ] && vm_names="$vm_names, "
+      vm_names="$vm_names$comm"
+      ;;
+  esac
+done
+
+vpn_active=0
+vpn_name=""
+for path in /sys/class/net/*; do
+  iface=${path##*/}
+  case "$iface" in
+    throne-tun|tun[0-9]*|tap[0-9]*|wg[0-9]*|tailscale[0-9]*)
+      [ -r "$path/operstate" ] || continue
+      state=$(cat "$path/operstate" 2>/dev/null || true)
+      if [ "$state" = up ] || [ "$state" = unknown ]; then
+        vpn_active=1
+        [ -n "$vpn_name" ] && vpn_name="$vpn_name, "
+        vpn_name="$vpn_name$iface"
+      fi
+      ;;
+  esac
+done
+
+# Throne can expose its tunnel as UNKNOWN, so also account for its process.
+for proc in /proc/[0-9]*; do
+  [ -r "$proc/comm" ] || continue
+  comm=$(cat "$proc/comm" 2>/dev/null || true)
+  case "$comm" in
+    Throne|ThroneCore|openvpn|wg-quick|tailscaled)
+      vpn_active=1
+      [ -n "$vpn_name" ] || vpn_name="private-network"
+      ;;
+  esac
+done
+
+printf '{"kvm_device":%s,"kvm_amd":%s,"kvm_intel":%s,"vm_count":%s,"vm_names":"%s","vpn_active":%s,"vpn_name":"%s"}\n' \
+  "$kvm_device" "$kvm_amd" "$kvm_intel" "$vm_count" "$(json_escape "$vm_names")" "$vpn_active" "$(json_escape "$vpn_name")"

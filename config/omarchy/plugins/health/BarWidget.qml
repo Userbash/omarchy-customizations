@@ -29,7 +29,7 @@ BarWidget {
 
   Process {
     id: backend
-    command: [Quickshell.env("HOME") + "/.config/omarchy/plugins/health/metrics-backend"]
+    command: [root.healthBackend]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {

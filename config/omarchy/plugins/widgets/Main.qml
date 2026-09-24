@@ -94,7 +94,7 @@ Item {
       implicitWidth: 460
       implicitHeight: (weatherTemp !== "" ? 166 : 0) + 198 + 158 + 28
       color: "transparent"
-      WlrLayershell.namespace: "omarchy-custom-widgets"
+      WlrLayershell.namespace: "sanya-widgets"
       // Desktop layer keeps all regular application windows above the cards;
       // the surface itself still receives pointer input on the desktop.
       WlrLayershell.layer: WlrLayer.Bottom

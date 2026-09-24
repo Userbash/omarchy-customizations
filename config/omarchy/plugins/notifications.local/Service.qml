@@ -109,9 +109,9 @@ Item {
   property int unreadTotal: 0
 
   function persistUnread() {
-    var dir = JSON.stringify(stateDir)
-    var file = JSON.stringify(stateDir + "notifications-unread")
-    unreadWriteProc.command = ["bash", "-c", "mkdir -p -- " + dir + " && printf '%s\\n' " + JSON.stringify(String(unreadTotal)) + " > " + file]
+    unreadWriteProc.command = ["bash", "-c",
+      "mkdir -p -- \"$1\" && printf '%s\\n' \"$3\" > \"$2\"", "--",
+      stateDir, stateDir + "notifications-unread", String(unreadTotal)]
     unreadWriteProc.running = true
   }
   Process { id: unreadWriteProc; command: ["true"] }

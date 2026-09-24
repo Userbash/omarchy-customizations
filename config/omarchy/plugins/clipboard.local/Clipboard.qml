@@ -7,6 +7,7 @@ import qs.Commons
 import qs.Ui
 import "ClipboardHistory.js" as ClipboardHistory
 import "ClipboardAdapter.js" as ClipboardAdapter
+import "KeyboardActions.js" as KeyboardActions
 
 Item {
   id: root
@@ -248,6 +249,33 @@ Item {
     Quickshell.execDetached([root.omarchyPath + "/bin/omarchy-clipboard-open", "--history-index", String(row.historyIndex)])
   }
 
+  function keyName(event) {
+    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) return "Return"
+    if (event.key === Qt.Key_Escape) return "Escape"
+    if (event.key === Qt.Key_Delete) return "Delete"
+    if (event.key === Qt.Key_S) return "S"
+    if (event.key === Qt.Key_P) return "P"
+    return ""
+  }
+
+  function dispatchShortcut(action) {
+    if (action === "close") {
+      if (root.filterText) root.setFilter("")
+      else root.close()
+      return
+    }
+    if (action === "paste") {
+      if (root.cursorActive) root.activateIndex(root.selectedIndex)
+      else if (displayModel.count > 0) root.cursorActive = true
+      return
+    }
+    if (action === "copy") return root.copyIndex(root.selectedIndex)
+    if (action === "open") return root.openIndex(root.selectedIndex)
+    if (action === "saveAs") return root.saveAs(root.selectedIndex, "")
+    if (action === "pin") return root.pinItem(root.selectedIndex, true)
+    if (action === "clearAll") return root.requestClearHistory()
+  }
+
   Component.onCompleted: initProc.running = true
 
   ListModel { id: displayModel }
@@ -366,6 +394,17 @@ Item {
             return
           }
 
+          var action = KeyboardActions.actionFor(root.keyName(event), {
+            ctrl: !!(event.modifiers & Qt.ControlModifier),
+            alt: !!(event.modifiers & Qt.AltModifier),
+            shift: !!(event.modifiers & Qt.ShiftModifier)
+          })
+          if (action) {
+            root.dispatchShortcut(action)
+            event.accepted = true
+            return
+          }
+
           if (event.key === Qt.Key_Escape) {
             if (root.filterText) root.setFilter("")
             else root.close()
@@ -374,8 +413,7 @@ Item {
             root.setFilter(Util.editedFilter(event, root.filterText))
             event.accepted = true
           } else if (event.key === Qt.Key_Delete) {
-            if (event.modifiers & Qt.ShiftModifier) root.requestClearHistory()
-            else root.removeDisplayIndex(root.selectedIndex)
+            root.requestClearHistory()
             event.accepted = true
           } else if (event.key === Qt.Key_Up) {
             root.select(-1)
@@ -413,8 +451,8 @@ Item {
           anchors.fill: parent
           opened: root.clearConfirmOpen
           z: 10
-          message: "Delete entire clipboard history?"
-          confirmText: "Delete"
+          message: "Удалить всю историю буфера обмена?"
+          confirmText: "Удалить всё"
           background: root.background
           foreground: root.foreground
           scrim: root.scrim
@@ -612,11 +650,24 @@ Item {
               Row {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.leftMargin: root.contentMargin
                 spacing: Style.space(6)
-                Button { text: "Save As"; onClicked: root.saveAs(root.selectedIndex, "") }
-                Button { text: "Delete"; onClicked: root.removeDisplayIndex(root.selectedIndex) }
-                Button { text: "Pin"; onClicked: root.pinItem(root.selectedIndex, true) }
+                Button {
+                  width: (parent.width - root.contentMargin - Style.space(12)) / 3
+                  text: KeyboardActions.labels().saveAs
+                  onClicked: root.saveAs(root.selectedIndex, "")
+                }
+                Button {
+                  width: (parent.width - root.contentMargin - Style.space(12)) / 3
+                  text: KeyboardActions.labels().clearAll
+                  onClicked: root.requestClearHistory()
+                }
+                Button {
+                  width: (parent.width - root.contentMargin - Style.space(12)) / 3
+                  text: KeyboardActions.labels().pin
+                  onClicked: root.pinItem(root.selectedIndex, true)
+                }
               }
             }
           }

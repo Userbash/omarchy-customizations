@@ -28,6 +28,30 @@ updates do not overwrite it.
 All plugins are regular Quickshell components. They use the existing Omarchy
 theme, spacing, icon, and popup primitives instead of replacing the shell.
 
+The repository currently tracks the ten user plugins installed on the desktop:
+
+- `health` reports CPU, memory, disk, and temperature values.
+- `kvm-status` reports `/dev/kvm`, loaded KVM modules, running virtual-machine
+  processes, and the detected private-network interface. It is read-only and
+  treats malformed backend output as unavailable instead of throwing QML
+  errors.
+- `weather` fetches and formats the configured weather location.
+- `bluetooth-battery` shows battery levels for connected Bluetooth devices.
+- `vpn-monitor` provides VPN state and on-demand diagnostics through the local
+  monitor service.
+- `notifications-indicator` is the compact unread counter and history entry
+  point.
+- `notifications.local` receives notifications over D-Bus, keeps a bounded
+  local history, and persists only the unread count.
+- `clipboard.local` captures local clipboard history and exposes the overlay
+  actions described below.
+- `music-desktop` renders the click-through desktop music visualizer and clock.
+- `widgets` renders the desktop system, network, weather, and music cards.
+
+`kvm-status`, `health`, and the metric backends use defensive parsing and
+portable paths. A missing device, process, or metric is represented as an
+unknown or empty value rather than a false positive.
+
 #### `health`
 
 Read-only CPU, memory, disk, and temperature information. It is a compact bar
@@ -44,6 +68,22 @@ Local clipboard history with a capture helper. History stays on the machine and
 is not committed to the repository. Sensitive clipboard entries are filtered
 using the existing desktop metadata conventions.
 
+The overlay keeps keyboard handling local to the focused clipboard surface:
+
+| Shortcut | Action |
+| --- | --- |
+| `Enter` | Paste the selected item |
+| `Shift+Enter` | Copy the selected item |
+| `Alt+Enter` | Open the selected item with the desktop handler |
+| `Ctrl+S` | Save the selected item as a file |
+| `Ctrl+P` | Pin the selected item |
+| `Ctrl+Delete` or `Delete` | Confirm, then clear the full history |
+| `Esc` | Clear the filter, or close the overlay when it is empty |
+
+The footer uses three equal-width buttons so labels remain readable at narrow
+panel sizes. The capture helper applies `umask 077`; runtime history and image
+files stay private in the user's state directory.
+
 #### `notifications.local` and `notifications-indicator`
 
 The notification service receives D-Bus notifications, stores a bounded local
@@ -57,6 +97,10 @@ and is excluded from version control.
 Desktop-layer widgets for music, weather, network, system metrics, and the
 visualizer. They are click-through where appropriate and use the Omarchy glass
 surface without adding a separate window-manager layer.
+
+The desktop layers use user-specific namespaces (`sanya-music-desktop` and
+`sanya-widgets`) so they do not collide with another shell surface using an
+older generic namespace.
 
 #### `omarchy.bluetooth`
 
@@ -191,6 +235,20 @@ PYTHONPATH=backend python -m unittest discover -s tests -q
 The repository does not include live VPN control tests. Those require a
 separate disposable VPN profile and could otherwise interrupt an active
 connection.
+
+The plugin-level smoke tests can be run directly as well:
+
+```bash
+bash config/omarchy/plugins/clipboard.local/tests/test_clipboard.sh
+bash config/omarchy/plugins/music-desktop/tests/test_music_desktop.sh
+node tests/test_notifications_logic.js
+PYTHONPATH=backend python -m unittest discover -s tests -q
+```
+
+These checks cover the shortcut map, clipboard manifest and shell syntax,
+music animation logic, notification input handling, backend JSON contracts,
+and read-only VPN/Bluetooth probes. They do not require a live VPN connection
+or modify network configuration.
 
 ## Privacy and portability
 

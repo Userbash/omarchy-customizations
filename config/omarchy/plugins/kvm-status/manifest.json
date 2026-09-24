@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "kvm-status",
+  "name": "KVM status",
+  "version": "1.0.0",
+  "author": "sanya",
+  "description": "Read-only KVM activity and private-network status indicator.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "KVM",
+    "description": "KVM availability, running virtual machines and private network status",
+    "category": "Info",
+    "allowMultiple": false
+  }
+}

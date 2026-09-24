@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "widgets",
-  "name": "Omarchy glass widgets",
+  "name": "Sanya glass widgets",
   "version": "1.0.0",
-  "author": "Omarchy Customizations",
+  "author": "sanya",
   "description": "Transparent right-side system, weather, network and music cards.",
   "kinds": ["service"],
   "keepLoaded": true,
