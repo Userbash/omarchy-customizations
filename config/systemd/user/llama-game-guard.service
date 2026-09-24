@@ -1,0 +1,19 @@
+[Unit]
+Description=Pause local Qwen while a fullscreen game is running
+After=graphical-session.target hyprland-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/llama-game-guard --interval 1 --enter-samples 2 --exit-samples 3
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%t
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=graphical-session.target

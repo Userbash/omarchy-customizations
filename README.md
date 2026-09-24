@@ -262,6 +262,35 @@ metadata; it does not depend on a particular user's home directory. Bluetooth
 and VPN data are read from the local machine and are not uploaded by these
 plugins.
 
+## Automatic game mode for the local LLM
+
+`llama-game-guard.service` watches Hyprland's structured client and monitor
+state once per second. It pauses the Qwen server before a known game has been
+fullscreen on the monitor for two consecutive samples, and resumes the stack
+after three samples without a game. Detection requires both fullscreen
+geometry and a game identity such as a `steam_app_*` class, Gamescope, a
+Proton/Wine executable, or a configured game title. Normal fullscreen browser,
+terminal, desktop, and editor windows are rejected.
+
+The guard stops the worker pool, API router, health watchdog, and Qwen server
+in dependency order. It starts them in reverse order when the game exits, so
+the health watchdog cannot immediately undo the pause. The detector has a
+`--dry-run --once` mode for diagnostics and uses no polling of pixels,
+keyboard input, or privileged system APIs.
+
+The service only manages the four local Qwen units listed above. It does not
+kill game processes, change Hyprland settings, unload kernel modules, or touch
+other GPU applications. A systemd stop or logout leaves the Qwen stack under
+the user's normal control.
+
+The installer places the program at `~/.local/bin/llama-game-guard` and enables
+the user unit. To inspect its decisions:
+
+```bash
+journalctl --user -u llama-game-guard.service -f
+~/.local/bin/llama-game-guard --dry-run --once
+```
+
 ## Uninstall
 
 ```bash

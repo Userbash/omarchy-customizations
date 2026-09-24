@@ -8,5 +8,6 @@ command -v jq >/dev/null && pass jq || fail jq
 jq empty "$root/config/omarchy/shell.json" && pass shell.json || fail shell.json
 while IFS= read -r f; do jq empty "$f" && pass "$f" || fail "$f"; done < <(find "$root/config/omarchy/plugins" -name manifest.json -print)
 for f in "$root"/scripts/*.sh; do bash -n "$f" && pass "$f" || fail "$f"; done
+python3 -m py_compile "$root/scripts/llama-game-guard.py" && pass llama-game-guard.py || fail llama-game-guard.py
 for tool in qmllint qmltestrunner wtype; do command -v "$tool" >/dev/null && pass "$tool" || printf 'SKIP — %s is not installed\n' "$tool"; done
 exit "$status"
