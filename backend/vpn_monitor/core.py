@@ -123,11 +123,22 @@ class TrafficTracker:
 
 class SpeedTestManager:
     """Runs a bounded diagnostic in the background; it never controls a VPN."""
+    MAX_HISTORY = 32
+
     def __init__(self, system):
         self.system, self.lock, self.tests, self.cancel_events = system, Lock(), {}, {}
 
+    def _prune(self):
+        terminal = {"COMPLETED", "ERROR", "CANCELLED"}
+        completed = [key for key, value in self.tests.items() if value["status"] in terminal]
+        while len(self.tests) > self.MAX_HISTORY and completed:
+            old = completed.pop(0)
+            self.tests.pop(old, None)
+            self.cancel_events.pop(old, None)
+
     def start(self, interface=None, proxy_url=None):
         with self.lock:
+            self._prune()
             running = next((item for item in self.tests.values() if item["status"] in ("STARTED", "RUNNING", "CANCELLING")), None)
             if running:
                 return dict(running)
@@ -150,11 +161,13 @@ class SpeedTestManager:
                     record.update(status="CANCELLED", progress=0)
                 else:
                     record.update(status="COMPLETED", progress=100, **result)
+                self._prune()
         except Exception as error:
             with self.lock:
                 record = self.tests[test_id]
                 record.update(status="CANCELLED" if cancelled.is_set() else "ERROR", progress=0)
                 if not cancelled.is_set(): record["message"] = str(error)
+                self._prune()
 
     def get(self, test_id):
         with self.lock:

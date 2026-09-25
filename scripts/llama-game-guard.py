@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ GAME_CLASS = re.compile(
     r"^(?:steam_app_[0-9]+|gamescope|steam_game|wine|wine64|lutris|heroic|bottles)$",
     re.IGNORECASE,
 )
-GAME_TITLE = re.compile(r"\b(bodycam|game|gameplay|unreal|unity|proton|wine)\b", re.IGNORECASE)
+GAME_TITLE = re.compile(r"\b(bodycam|gameplay|unreal|unity|proton|wine)\b", re.IGNORECASE)
 GAME_PATH = re.compile(r"(?:/steamapps/common/|/compatdata/[0-9]+/|\.exe(?:\x00|$))", re.IGNORECASE)
 DESKTOP_CLASS = re.compile(
     r"^(?:steam|steamwebhelper|discord|brave-browser|firefox|org\.mozilla\.firefox|orca|dolphin|kitty|foot)$",
@@ -115,19 +116,49 @@ class ServiceController:
     def __init__(self, runner: Callable[..., subprocess.CompletedProcess] | None = None, dry_run: bool = False):
         self.runner = runner or subprocess.run
         self.dry_run = dry_run
+        self.paused_services: list[str] = []
 
-    def _call(self, action: str, unit: str) -> None:
+    def _call(self, action: str, unit: str, *, check: bool = True) -> subprocess.CompletedProcess:
         if self.dry_run:
-            return
-        self.runner(["systemctl", "--user", action, unit], check=False, timeout=45)
+            return subprocess.CompletedProcess(["systemctl", "--user", action, unit], 0)
+        result = self.runner(["systemctl", "--user", action, unit], check=False, timeout=45)
+        if check and result.returncode:
+            raise RuntimeError(f"systemctl --user {action} {unit} failed with exit code {result.returncode}")
+        return result
 
     def pause(self) -> None:
-        for unit in self.services:
-            self._call("stop", unit)
+        active = [unit for unit in self.services if self._call("is-active", unit, check=False).returncode == 0]
+        self.paused_services = []
+        try:
+            for unit in active:
+                self._call("stop", unit)
+                self.paused_services.append(unit)
+        except Exception:
+            self.resume()
+            raise
 
     def resume(self) -> None:
-        for unit in reversed(self.services):
-            self._call("start", unit)
+        failures = []
+        for unit in reversed(self.paused_services):
+            try:
+                self._call("start", unit)
+            except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+                failures.append(str(error))
+        failed_units = {
+            unit for unit in self.paused_services
+            if any(f" {unit} " in f" {failure} " for failure in failures)
+        }
+        self.paused_services = [unit for unit in self.paused_services if unit in failed_units]
+        if failures:
+            raise RuntimeError("Could not restore paused services: " + "; ".join(failures))
+
+
+class GuardShutdown(Exception):
+    """Raised by a signal handler to trigger service recovery."""
+
+
+def is_state_unavailable(decision: Decision) -> bool:
+    return decision.reason == "Hyprland state unavailable"
 
 
 def run_guard(interval: float, enter_samples: int, exit_samples: int, dry_run: bool, once: bool) -> int:
@@ -135,34 +166,55 @@ def run_guard(interval: float, enter_samples: int, exit_samples: int, dry_run: b
     paused = False
     positive = negative = 0
     last_state: bool | None = None
-    while True:
-        try:
-            decision = choose_game(hypr_json("clients"), hypr_json("monitors"), proc_cmdline)
-        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
-            decision = Decision(False, reason="Hyprland state unavailable")
-        if once or decision.active != last_state:
-            payload = {"game": decision.active, "reason": decision.reason}
-            if decision.client:
-                payload["class"] = decision.client.get("class", "")
-                payload["title"] = decision.client.get("title", "")
-                payload["pid"] = decision.client.get("pid", 0)
-            print(json.dumps(payload, ensure_ascii=False), flush=True)
-            last_state = decision.active
-        if decision.active:
-            positive += 1
-            negative = 0
-            if not paused and positive >= enter_samples:
-                controller.pause()
-                paused = True
-        else:
-            negative += 1
-            positive = 0
-            if paused and negative >= exit_samples:
+    original_handlers = {}
+
+    def request_shutdown(_signum, _frame):
+        raise GuardShutdown()
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        original_handlers[signum] = signal.signal(signum, request_shutdown)
+    try:
+        while True:
+            try:
+                decision = choose_game(hypr_json("clients"), hypr_json("monitors"), proc_cmdline)
+            except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
+                decision = Decision(False, reason="Hyprland state unavailable")
+            if once or decision.active != last_state:
+                payload = {"game": decision.active, "reason": decision.reason}
+                if decision.client:
+                    payload["class"] = decision.client.get("class", "")
+                    payload["title"] = decision.client.get("title", "")
+                    payload["pid"] = decision.client.get("pid", 0)
+                print(json.dumps(payload, ensure_ascii=False), flush=True)
+                last_state = decision.active
+            if decision.active:
+                positive += 1
+                negative = 0
+                if not paused and positive >= enter_samples:
+                    controller.pause()
+                    paused = True
+            elif not is_state_unavailable(decision):
+                negative += 1
+                positive = 0
+                if paused and negative >= exit_samples:
+                    controller.resume()
+                    paused = False
+            if once:
+                return 0
+            time.sleep(interval)
+    except GuardShutdown:
+        return 0
+    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+        print(json.dumps({"game": False, "reason": "guard error", "error": str(error)}), flush=True)
+        return 1
+    finally:
+        for signum, handler in original_handlers.items():
+            signal.signal(signum, handler)
+        if paused or controller.paused_services:
+            try:
                 controller.resume()
-                paused = False
-        if once:
-            return 0
-        time.sleep(interval)
+            except RuntimeError as error:
+                print(json.dumps({"game": False, "reason": "service recovery failed", "error": str(error)}), flush=True)
 
 
 def main() -> int:

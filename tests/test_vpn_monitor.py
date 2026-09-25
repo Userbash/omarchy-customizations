@@ -579,6 +579,24 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["code"], "SPEED_TEST_REQUIRES_ACTIVE_VPN")
         self.assertEqual(self.app.monitor.system.speed_requests, [])
 
+    def test_speed_test_history_is_bounded_and_old_cancel_handles_are_removed(self):
+        from vpn_monitor.core import SpeedTestManager
+
+        class ImmediateSystem:
+            def speed_test(self, _cancelled, **_kwargs):
+                return {"downloadMbps": 1}
+
+        manager = SpeedTestManager(ImmediateSystem())
+        for _ in range(manager.MAX_HISTORY + 8):
+            started = manager.start()
+            for _attempt in range(100):
+                record = manager.get(started["testId"])
+                if record["status"] == "COMPLETED":
+                    break
+                time.sleep(.001)
+        self.assertLessEqual(len(manager.tests), manager.MAX_HISTORY)
+        self.assertEqual(len(manager.tests), len(manager.cancel_events))
+
     def test_selection_rejects_json_values_that_are_not_objects(self):
         code, _headers, output = self.app.handle("PUT", "/api/v1/settings/selected-client", b"[]")
         payload = json.loads(output.decode())

@@ -110,7 +110,8 @@ pairing, connection and disconnection, forgetting paired devices, keyboard
 navigation, and accessible action feedback.
 
 This repository does not replace that panel with a custom Bluetooth command
-runner.
+runner. The custom VPN widget uses the `sanya.*` IPC namespace so it cannot
+collide with Omarchy's built-in targets during shell reloads.
 
 #### `bluetooth-battery`
 
@@ -187,10 +188,15 @@ From the repository root:
 ./scripts/smoke.sh
 ```
 
-`install.sh` creates a timestamped backup of the current Hyprland and Omarchy
-shell configuration, installs user plugins, copies the Python backend, installs
-the systemd user unit, reloads the unit files, and starts the monitor. It then
-reloads the Omarchy shell and Hyprland where available.
+`install.sh` validates the repository, snapshots every managed path, stages a
+clean replacement, reloads the user units, starts both services, and reloads
+the Omarchy shell and Hyprland. Service and reload failures stop the install.
+If a later step fails, the previous files and service states are restored from
+the recorded backup. Backups use a unique directory name and include a
+manifest of paths that did not exist before installation.
+
+For isolated installer tests, `CUSTOMIZATIONS_HOME` and
+`CUSTOMIZATIONS_STATE` may point at a temporary home and state directory.
 
 The installer writes only to user-owned locations:
 
@@ -223,9 +229,11 @@ systemctl --user status omarchy-vpn-monitor.service
 curl http://127.0.0.1:8765/health
 ```
 
-The checks validate JSON manifests, shell syntax, backend compilation, the
-local notification path, and panel geometry. Optional QML tools are reported
-as `SKIP` when they are not installed; they are never treated as passing tests.
+The checks validate JSON manifests, shell syntax for repository scripts and
+hooks, Python compilation, systemd units, backend contracts, notification
+logic, and isolated install/uninstall behavior. Optional QML tools and
+`shellcheck` are reported as `SKIP` when they are not installed; they are never
+treated as passing tests.
 The backend contract tests can be run against this checkout with:
 
 ```bash
@@ -365,9 +373,11 @@ PYTHONPATH=backend python -m unittest discover -s tests -q
 ./scripts/uninstall.sh
 ```
 
-The uninstall script moves installed custom plugin directories into a
-timestamped backup. It does not delete notification history or other user
-state.
+The uninstall script requires the install backup record, stops and disables
+the two managed services, restores every file that existed before installation,
+reloads systemd, and reloads the shell and Hyprland. It keeps a rollback
+snapshot of the current files and does not delete notification history or other
+user state.
 
 ## License
 

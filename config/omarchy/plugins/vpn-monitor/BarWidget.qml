@@ -24,7 +24,7 @@ ShellUi.BarWidget {
   function toggle() { opened = !opened }
 
   IpcHandler {
-    target: "omarchy.vpn-monitor"
+    target: "sanya.vpn-monitor"
 
     function state(): string {
       return JSON.stringify({
