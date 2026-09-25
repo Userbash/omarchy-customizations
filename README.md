@@ -5,7 +5,7 @@ contains the configuration, Quickshell plugins, and a small local monitoring
 service used by the panel. It never modifies `/usr/share/omarchy`; all changes
 are installed under the user's home directory.
 
-![Omarchy desktop demo](docs/media/omarchy-demo.gif)
+[Watch the Omarchy desktop demo](docs/media/omarchy-demo.mp4)
 
 ## What This Repository Provides
 
@@ -290,6 +290,74 @@ the user unit. To inspect its decisions:
 journalctl --user -u llama-game-guard.service -f
 ~/.local/bin/llama-game-guard --dry-run --once
 ```
+
+## Changes from 25 September 2026
+
+This update records the changes made during the local Omarchy and Hyprland audit.
+
+### Music desktop plugin
+
+The music desktop service now has a tested spectrum parser in
+`config/omarchy/plugins/music-desktop/SpectrumParser.js`. It always produces the
+configured number of bands, clamps invalid values, pads short Cava lines, and
+handles malformed input without producing `NaN` values.
+
+The cat motion code now uses shared sprite geometry, rejects invalid stage
+sizes, keeps the image and movement bounds aligned, and caches the calculated
+pose once per animation frame. Dragging preserves the pointer offset, handles
+cancelled gestures, clamps release positions to the floor, and restores a safe
+resting pose when music stops.
+
+The service now runs one shared cat stage on the first available screen. This
+avoids conflicting global physics state when more than one monitor is present.
+The Cava process reports stderr, clears stale spectrum data after 1.2 seconds,
+restarts with exponential backoff, and stops after five consecutive failures.
+A successful audio sample resets the failure counter.
+
+The plugin tests now include static checks, CatMotion unit and edge tests,
+spectrum parser tests, regression checks for hitboxes and lifecycle behavior,
+and a smoke test that starts Cava and loads the QML component through
+Quickshell.
+
+### Shell configuration
+
+The repository's `config/omarchy/shell.json` is synchronized with the active
+user configuration. It includes the `kvm-status` widget in the center layout,
+keeps the desktop shell transparent, and records the local clipboard and
+notification clone settings.
+
+### VPN monitor
+
+The speed test now forces HTTP/1.1 for both download and upload requests. This
+avoids intermittent TLS failures through the local Throne SOCKS proxy. The
+behavior is covered by a unit test and documented in the test guide. A bounded
+VPN speed smoke test is also included; it requires the local monitor service and
+an active tunnel.
+
+### Demo media
+
+The README demo is now an AV1 MP4 without an audio track:
+`docs/media/omarchy-demo.mp4`. The previous GIF has been removed. The source
+file was `/home/sanya/Videos/Video_2026-09-25_15-02-23_av1_noaudio.mp4`.
+
+### Verification
+
+The music desktop plugin passed its static, unit, edge, parser, Cava stream,
+and Quickshell loading checks. JSON, JavaScript, and shell syntax checks also
+passed. `hyprctl configerrors` returned no errors. The repository checks should
+be run from the repository root before installation:
+
+```bash
+./scripts/check.sh
+bash config/omarchy/plugins/music-desktop/tests/test_music_desktop.sh
+bash config/omarchy/plugins/music-desktop/tests/test_regressions.sh
+node config/omarchy/plugins/music-desktop/tests/cat-motion-test.js
+node config/omarchy/plugins/music-desktop/tests/cat-motion-edge-test.js
+node config/omarchy/plugins/music-desktop/tests/spectrum-parser-test.js
+bash config/omarchy/plugins/music-desktop/tests/smoke_music_desktop.sh
+PYTHONPATH=backend python -m unittest discover -s tests -q
+```
+
 
 ## Uninstall
 

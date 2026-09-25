@@ -25,6 +25,9 @@
           "id": "health"
         },
         {
+          "id": "kvm-status"
+        },
+        {
           "id": "weather"
         }
       ],
@@ -70,8 +73,16 @@
       ]
     },
     "position": "top",
-    "transparent": false
+    "transparent": true
   },
+  "cloneSourceRestores": [
+    "clipboard.local",
+    "notifications.local"
+  ],
+  "disabledPlugins": [
+    "omarchy.clipboard",
+    "omarchy.notifications"
+  ],
   "idle": {
     "lock": 300,
     "screensaver": 150
@@ -90,13 +101,5 @@
       "id": "notifications.local"
     }
   ],
-  "version": 1,
-  "disabledPlugins": [
-    "omarchy.clipboard",
-    "omarchy.notifications"
-  ],
-  "cloneSourceRestores": [
-    "clipboard.local",
-    "notifications.local"
-  ]
+  "version": 1
 }

@@ -1,8 +1,10 @@
 // Deterministic motion backend for the desktop cat.  It has no filesystem,
 // process, or network access; all input is numeric and bounded before use.
 var CatMotion = {
-  // The pose cycle is sampled at the display's 144 Hz refresh rate. Fractional
-  // frames are also supported, so rendering stays smooth between samples.
+  // Geometry is shared with the QML hitbox and floor calculations.
+  spriteWidth: 138,
+  spriteHeight: 146,
+  // Fractional frames are supported, so rendering stays smooth between samples.
   frameCount: 144,
 
   clamp: function(value, low, high) {
@@ -33,8 +35,12 @@ var CatMotion = {
   },
 
   nextPosition: function(state, stageWidth, stageHeight, seconds) {
-    var maxX = Math.max(0, Number(stageWidth) - 112)
-    var floorY = Math.max(0, Number(stageHeight) - 146)
+    var width = Number(stageWidth)
+    var height = Number(stageHeight)
+    if (!isFinite(width)) width = 0
+    if (!isFinite(height)) height = 0
+    var maxX = Math.max(0, width - this.spriteWidth)
+    var floorY = Math.max(0, height - this.spriteHeight)
     var dt = this.clamp(seconds, 0, 0.2)
     var x = this.clamp(state.x, 0, maxX) + this.clamp(state.vx, -380, 380) * dt
     var y = this.clamp(state.y, 0, floorY) + this.clamp(state.vy, -420, 420) * dt

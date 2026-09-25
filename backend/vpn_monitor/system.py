@@ -273,7 +273,10 @@ class RealSystem:
     def speed_test(self, cancelled, interface=None, proxy_url=None):
         if not self.executable("curl"):
             raise RuntimeError("curl is not available")
-        common = ["curl", "-fsSL", "--connect-timeout", "4", "--max-time", "20", *self.curl_route_options(interface, proxy_url), "-o", "/dev/null", "-w"]
+        # Throne's local SOCKS5 proxy can intermittently terminate the TLS
+        # handshake when curl negotiates HTTP/2.  The speed endpoint does not
+        # need HTTP/2, so keep both phases on the more interoperable protocol.
+        common = ["curl", "-fsSL", "--http1.1", "--connect-timeout", "4", "--max-time", "20", *self.curl_route_options(interface, proxy_url), "-o", "/dev/null", "-w"]
         download = self._speed_command(common + ["%{speed_download}", "https://speed.cloudflare.com/__down?bytes=5000000"], cancelled)
         if cancelled.is_set(): raise RuntimeError("Speed test cancelled")
         with tempfile.NamedTemporaryFile() as payload:

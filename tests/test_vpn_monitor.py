@@ -427,6 +427,26 @@ class SystemDiagnosticsTests(unittest.TestCase):
         self.assertTrue(process.terminated)
         self.assertTrue(process.killed)
 
+    def test_speed_test_forces_http11_for_both_phases(self):
+        system = RealSystem()
+        commands = []
+
+        def fake_speed_command(command, _cancelled):
+            commands.append(command)
+            return 16.0 if len(commands) == 1 else 4.0
+
+        with patch.object(system, "executable", return_value="/usr/bin/curl"), \
+                patch.object(system, "_speed_command", side_effect=fake_speed_command), \
+                patch.object(system, "connectivity", return_value={"ping": {"averageMs": 12}}):
+            result = system.speed_test(Event(), proxy_url="socks5h://127.0.0.1:2080")
+
+        self.assertEqual(result, {"downloadMbps": 16.0, "uploadMbps": 4.0, "latencyMs": 12})
+        self.assertEqual(len(commands), 2)
+        self.assertIn("--http1.1", commands[0])
+        self.assertIn("--http1.1", commands[1])
+        self.assertEqual(commands[0][-1], "https://speed.cloudflare.com/__down?bytes=5000000")
+        self.assertEqual(commands[1][-1], "https://speed.cloudflare.com/__up")
+
 
 class ApiTests(unittest.TestCase):
     def setUp(self):

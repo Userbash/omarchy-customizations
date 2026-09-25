@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "CatMotion.js" as Motion
+import "SpectrumParser.js" as Spectrum
 
 Item {
   id: root
@@ -11,6 +12,9 @@ Item {
   // Only fixed, local paths are passed to Cava: no user input reaches a shell.
   readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/music-desktop"
   readonly property int bandCount: 144
+  readonly property int spriteWidth: 138
+  readonly property int spriteHeight: 146
+  readonly property int catHitboxHeight: 138
   // The panel is shown on a 144 Hz display. Keep the simulation step tied to
   // that refresh rate, with fractional pose frames between whole samples.
   property var bands: Array(bandCount).fill(0)
@@ -59,6 +63,17 @@ Item {
   property real beatPeak: 0
   property real catSpin: catDefaultRotation
   property real catTailAngle: 0
+  property real dragOffsetX: 0
+  property real dragOffsetY: 0
+  property real lastSpectrumAt: 0
+  property bool spectrumStale: true
+  property string cavaError: ""
+  property int cavaRestartCount: 0
+  readonly property int cavaMaxRetries: 5
+  property int cavaConsecutiveFailures: 0
+  property real cavaBackoffSeconds: 2
+  property var catPose: Motion.CatMotion.pose(0, 0, catDefaultFacingRight)
+  readonly property var targetScreen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
 
   function clamp(value) {
     return Math.max(0, Math.min(1, Number(value) || 0))
@@ -96,21 +111,27 @@ Item {
     root.beatPeak = 0
     root.catSpin = root.catDefaultRotation
     root.catTailAngle = 0
+    root.dragOffsetX = 0
+    root.dragOffsetY = 0
+    root.lastSpectrumAt = 0
+    root.spectrumStale = true
+    root.catPose = Motion.CatMotion.pose(0, 0, root.catDefaultFacingRight)
     root.catAnimationActive = false
 
     // The canonical defaults fit the normal DP-6 stage. Clamp only for a
     // smaller transient/fallback surface so no invalid coordinate leaks into
     // the next real monitor.
     if (root.catStageWidth > 0 && root.catStageHeight > 0) {
-      root.catX = Motion.CatMotion.clamp(root.catX, 0, Math.max(0, root.catStageWidth - 112))
-      root.catY = Motion.CatMotion.clamp(root.catY, 0, Math.max(0, root.catStageHeight - 146))
+      root.catX = Motion.CatMotion.clamp(root.catX, 0, Math.max(0, root.catStageWidth - root.spriteWidth))
+      root.catY = Motion.CatMotion.clamp(root.catY, 0, Math.max(0, root.catStageHeight - root.spriteHeight))
     }
   }
 
   function updateCatStage(stage, width, height) {
     var nextWidth = Math.max(0, Number(width) || 0)
     var nextHeight = Math.max(0, Number(height) || 0)
-    if (nextWidth < 112 || nextHeight < 146) {
+    if (root.catStageOwner !== null && root.catStageOwner !== stage) return
+    if (nextWidth < root.spriteWidth || nextHeight < root.spriteHeight) {
       if (root.catStageOwner !== null && root.catStageOwner !== stage) return
       root.catStageOwner = stage
       root.catStageReady = false
@@ -153,19 +174,24 @@ Item {
   }
 
   function applySpectrum(line) {
-    var fields = String(line || "").trim().split(/[;\s]+/)
-    var next = []
-    var total = 0
-    var peak = 0
-    for (var i = 0; i < bandCount; i++) {
-      var value = i < fields.length ? clamp(parseFloat(fields[i]) / 100) : 0
-      next.push(value)
-      total += value
-      peak = Math.max(peak, value)
-    }
-    bands = next
-    energy = total / bandCount
-    spectrumPeak = peak
+    var parsed = Spectrum.SpectrumParser.parse(line, root.bandCount)
+    bands = parsed.bands
+    energy = parsed.energy
+    spectrumPeak = parsed.peak
+    lastSpectrumAt = Date.now()
+    spectrumStale = false
+    cavaConsecutiveFailures = 0
+    cavaBackoffSeconds = 2
+    cavaError = ""
+  }
+
+  function clearSpectrum() {
+    bands = Array(root.bandCount).fill(0)
+    energy = 0
+    spectrumPeak = 0
+    lastRawEnergy = 0
+    lastSpectrumAt = 0
+    spectrumStale = true
   }
 
   function moveCatToward(mouseX, mouseY) {
@@ -191,6 +217,9 @@ Item {
     running: root.catStageReady
     onTriggered: {
       var dt = Motion.CatMotion.clamp(frameTime, 1 / 240, 1 / 45)
+      if (root.lastSpectrumAt > 0 && Date.now() - root.lastSpectrumAt > 1200) {
+        root.clearSpectrum()
+      }
       // A fast attack follows the beat; a shorter release keeps the result
       // lively while still interpolating every rendered frame.
       // The band average gives the overall loudness; the strongest band keeps
@@ -214,7 +243,14 @@ Item {
       if (!root.musicActive) {
         // The completed music animation must not leave a partial jump, flip,
         // or rotation behind for the next track or after a display wake-up.
-        if (root.catAnimationActive) root.resetCatAnimation()
+        if (!root.catDragging && root.catAnimationActive) root.resetCatAnimation()
+        if (!root.catDragging && !root.catAnimationActive &&
+            (Math.abs(root.catX - root.catDefaultX) > 0.5 || Math.abs(root.catY - root.catDefaultY) > 0.5)) {
+          root.catX = Motion.CatMotion.clamp(root.catDefaultX, 0, Math.max(0, root.catStageWidth - root.spriteWidth))
+          root.catY = Motion.CatMotion.clamp(root.catDefaultY, 0, Math.max(0, root.catStageHeight - root.spriteHeight))
+          root.catVelocityX = 0
+          root.catVelocityY = 0
+        }
         // No music means no motion or gravity simulation: preserve the exact
         // canonical X/Y/Z pose until a new audible signal arrives.
         return
@@ -244,7 +280,8 @@ Item {
       var targetBob = root.musicActive ? Math.sin(root.walkPhase * 1.4) * (1.2 + root.catTempo * 2.6 + root.beatPeak * 1.2) : 0
       root.idleBob = Motion.CatMotion.smooth(root.idleBob, targetBob, dt, 9)
 
-      root.catTailAngle = Motion.CatMotion.pose(root.catFrame, root.musicDrive, root.catFacingRight).tail
+      root.catPose = Motion.CatMotion.pose(root.catFrame, root.musicDrive, root.catFacingRight)
+      root.catTailAngle = root.catPose.tail
       // A beat adds a bounded lean instead of an accumulated full spin. The
       // angle always returns to zero, so a restored screen can never reveal a
       // cat frozen sideways at 90° or 270°.
@@ -254,13 +291,13 @@ Item {
 
       if (!root.catDragging && root.catStageWidth > 0) {
         if (root.catX <= 0.5) root.patrolDirection = 1
-        else if (root.catX >= root.catStageWidth - 112.5) root.patrolDirection = -1
+        else if (root.catX >= root.catStageWidth - root.spriteWidth - 0.5) root.patrolDirection = -1
         var patrolSpeed = root.musicActive ? 120 + root.musicDrive * 170 + root.beatPeak * 70 : 0
         var patrolVelocity = root.patrolDirection * patrolSpeed + Math.sin(root.walkPhase * 1.5) * (18 + root.beatPeak * 32)
         if (root.musicActive && root.cursorDistance < 240) patrolVelocity += root.pointerVelocityX
         root.catVelocityX = Motion.CatMotion.smooth(root.catVelocityX, patrolVelocity, dt, root.musicActive ? 6.2 : 10)
         root.jumpCooldown = Math.max(0, root.jumpCooldown - dt)
-        var floorY = root.catStageHeight - 146
+        var floorY = root.catStageHeight - root.spriteHeight
         // One bounded, smooth hop per beat cluster. A cooldown stops rapid
         // machine-gun jumping while retaining clear musical accents.
         if (root.musicActive && root.catY >= floorY - 0.5 && root.beatPeak > 0.22 && root.jumpCooldown === 0) {
@@ -291,8 +328,19 @@ Item {
     command: ["cava", "-p", root.pluginDir + "/cava.conf"]
     running: true
     stdout: SplitParser { onRead: function(line) { root.applySpectrum(line) } }
+    stderr: SplitParser { onRead: function(line) { root.cavaError = String(line || "").trim() } }
     onExited: function(exitCode) {
-      if (exitCode !== 0) restartTimer.restart()
+      root.cavaError = exitCode === 0 ? "Cava exited" : "Cava exited with code " + exitCode
+      root.clearSpectrum()
+      root.cavaRestartCount += 1
+      root.cavaConsecutiveFailures += 1
+      if (root.cavaConsecutiveFailures >= root.cavaMaxRetries) {
+        root.cavaError = "Cava disabled after " + root.cavaMaxRetries + " consecutive failures"
+        return
+      }
+      restartTimer.interval = Math.min(30000, Math.max(2000, root.cavaBackoffSeconds * 1000))
+      root.cavaBackoffSeconds = Math.min(30, root.cavaBackoffSeconds * 2)
+      restartTimer.restart()
     }
   }
 
@@ -300,11 +348,23 @@ Item {
     id: restartTimer
     interval: 2000
     repeat: false
-    onTriggered: cava.running = true
+    onTriggered: {
+      cava.running = true
+    }
+  }
+
+  Timer {
+    id: spectrumWatchdog
+    interval: 500
+    running: true
+    repeat: true
+    onTriggered: {
+      if (root.lastSpectrumAt > 0 && Date.now() - root.lastSpectrumAt > 1200) root.clearSpectrum()
+    }
   }
 
   Variants {
-    model: Quickshell.screens
+    model: root.targetScreen ? [root.targetScreen] : []
 
     PanelWindow {
       id: desktop
@@ -405,8 +465,8 @@ Item {
 
           Item {
             id: catWalker
-            width: 112
-            height: parent.height
+            width: root.spriteWidth
+            height: root.spriteHeight
             x: root.catX
             y: root.catY
             z: root.catZ
@@ -419,15 +479,15 @@ Item {
               source: "file://" + root.pluginDir + "/assets/music-cat-reference.png"
               fillMode: Image.PreserveAspectFit
               smooth: true
-              y: root.idleBob + Motion.CatMotion.pose(root.catFrame, root.musicDrive, root.catFacingRight).bob
+              y: root.idleBob + root.catPose.bob
               transformOrigin: Item.Bottom
-              rotation: Motion.CatMotion.pose(root.catFrame, root.musicDrive, root.catFacingRight).lean + root.catSpin
+              rotation: root.catPose.lean + root.catSpin
               transform: Scale {
                 id: catBeatScale
                 origin.x: cat.width / 2
                 origin.y: cat.height
-                xScale: Motion.CatMotion.pose(root.catFrame, root.musicDrive, root.catFacingRight).scaleX
-                yScale: Motion.CatMotion.pose(root.catFrame, root.musicDrive, root.catFacingRight).scaleY
+                xScale: root.catPose.scaleX
+                yScale: root.catPose.scaleY
                 Behavior on xScale { NumberAnimation { duration: 140; easing.type: Easing.InOutSine } }
                 Behavior on yScale { NumberAnimation { duration: 140; easing.type: Easing.InOutSine } }
               }
@@ -466,25 +526,34 @@ Item {
             // The only interactive surface is the cat itself; normal desktop
             // clicks outside it still pass through the Bottom layer.
             MouseArea {
-              anchors.fill: parent
+              width: root.spriteWidth
+              height: root.catHitboxHeight
               hoverEnabled: true
               acceptedButtons: Qt.LeftButton
               cursorShape: Qt.OpenHandCursor
               onPositionChanged: function(mouse) {
                 if (pressed) {
-                  root.catX = Motion.CatMotion.clamp(catWalker.x + mouse.x - 56, 0, catStage.width - catWalker.width)
-                  root.catY = Motion.CatMotion.clamp(catWalker.y + mouse.y - 68, 0, catStage.height - 146)
+                  root.catX = Motion.CatMotion.clamp(catWalker.x + mouse.x - root.dragOffsetX, 0, catStage.width - root.spriteWidth)
+                  root.catY = Motion.CatMotion.clamp(catWalker.y + mouse.y - root.dragOffsetY, 0, catStage.height - root.spriteHeight)
                   root.catVelocityX = 0; root.catVelocityY = 0
                 } else root.moveCatToward(catWalker.x + mouse.x, catWalker.y + mouse.y)
               }
-              onPressed: function(mouse) { root.catDragging = true; cursorShape = Qt.ClosedHandCursor; root.moveCatToward(catWalker.x + mouse.x, catWalker.y + mouse.y) }
+              onPressed: function(mouse) {
+                root.catDragging = true
+                root.dragOffsetX = mouse.x
+                root.dragOffsetY = mouse.y
+                cursorShape = Qt.ClosedHandCursor
+                root.moveCatToward(catWalker.x + mouse.x, catWalker.y + mouse.y)
+              }
               onReleased: {
                 root.catDragging = false
                 cursorShape = Qt.OpenHandCursor
                 // Releasing the cat leaves it on the floor rather than
                 // launching a sudden jump.
                 root.catVelocityY = 0
+                root.catY = Motion.CatMotion.clamp(root.catY, 0, catStage.height - root.spriteHeight)
               }
+              onCanceled: { root.catDragging = false; root.catVelocityX = 0; root.catVelocityY = 0; cursorShape = Qt.OpenHandCursor }
               onEntered: root.cursorDistance = 0
               onExited: root.cursorDistance = 9999
             }
