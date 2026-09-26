@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "widgets",
-  "name": "Sanya desktop dashboard",
+  "name": "Desktop dashboard",
   "version": "1.0.0",
-  "author": "sanya",
+  "author": "Omarchy Customizations",
   "description": "Matte right-side dashboard for weather, system metrics and media with movable tiles and light/dark themes.",
   "kinds": ["service"],
   "keepLoaded": true,

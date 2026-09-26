@@ -13,8 +13,8 @@ hl.config({
 })
 
 hl.layer_rule({
-  name = "sanya-widgets-dashboard",
-  match = { namespace = "^sanya-widgets$" },
+  name = "omarchy-widgets-dashboard",
+  match = { namespace = "^omarchy-widgets$" },
   blur = true,
   ignore_alpha = 0.10,
 })

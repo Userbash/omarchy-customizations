@@ -7,7 +7,7 @@ are installed under the user's home directory.
 
 [Watch the Omarchy desktop demo](docs/media/omarchy-demo.mp4)
 
-[Watch the UI reference from 01:35 on YouTube](https://www.youtube.com/watch?v=J4LdlUgOGe8&t=95s)
+[![Pixso widget design walkthrough, starting at 01:35](https://img.youtube.com/vi/J4LdlUgOGe8/hqdefault.jpg)](https://www.youtube.com/watch?v=J4LdlUgOGe8&t=95s)
 
 ## What This Repository Provides
 
@@ -302,11 +302,15 @@ or modify network configuration.
 
 Screenshots in `docs/media/` and the desktop demo are intentional documentation
 assets. Runtime databases and state are generated locally and ignored by Git.
-Source and documentation paths use `$HOME` or XDG locations rather than an
-author-specific absolute home path. A targeted audit of the current
-non-ignored tree found no high-confidence credential patterns or absolute
-home-directory paths; the audit notes also record a path in older Git history.
-The only local API service listens on `127.0.0.1:8765`.
+Persistent source paths use `$HOME` or XDG locations; tests use isolated
+temporary directories. The current tracked files use generic plugin authors
+and IPC namespaces and contain no user-specific absolute home paths or account
+labels. A targeted scan found no high-confidence credential patterns. Earlier
+Git revisions still contain account-specific plugin metadata and an absolute
+local media source path in two README revisions. A normal follow-up commit
+cannot remove those historical values; the audit notes explain the cleanup
+needed before publishing the full history. The only local API service listens
+on `127.0.0.1:8765`.
 
 The backend discovers the optional Throne client through `PATH` and process
 metadata; it does not depend on a particular user's home directory. Bluetooth

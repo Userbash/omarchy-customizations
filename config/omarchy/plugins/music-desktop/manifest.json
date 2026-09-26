@@ -3,7 +3,7 @@
   "id": "music-desktop",
   "name": "Music desktop",
   "version": "1.0.0",
-  "author": "sanya",
+  "author": "Omarchy Customizations",
   "description": "Click-through music visualizer, clock and dancing cat for the desktop.",
   "kinds": ["service"],
   "entryPoints": {

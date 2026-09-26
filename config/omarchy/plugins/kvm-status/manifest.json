@@ -3,7 +3,7 @@
   "id": "kvm-status",
   "name": "KVM status",
   "version": "1.0.0",
-  "author": "sanya",
+  "author": "Omarchy Customizations",
   "description": "Read-only KVM activity and private-network status indicator.",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "BarWidget.qml" },

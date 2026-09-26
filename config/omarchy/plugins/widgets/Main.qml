@@ -753,7 +753,7 @@ Item {
       implicitWidth: 480
       implicitHeight: Math.max(320, Math.min(contentColumn.implicitHeight + 36, modelData.height - 76))
       color: "transparent"
-      WlrLayershell.namespace: "sanya-widgets"
+      WlrLayershell.namespace: "omarchy-widgets"
       // Keep the dashboard above the wallpaper but below application windows.
       WlrLayershell.layer: WlrLayer.Bottom
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand

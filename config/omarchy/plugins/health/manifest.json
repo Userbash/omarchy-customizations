@@ -3,7 +3,7 @@
   "id": "health",
   "name": "System health",
   "version": "1.0.0",
-  "author": "sanya",
+  "author": "Omarchy Customizations",
   "description": "Read-only CPU, memory, disk and temperature indicator.",
   "kinds": ["bar-widget"],
   "entryPoints": { "barWidget": "BarWidget.qml" },
