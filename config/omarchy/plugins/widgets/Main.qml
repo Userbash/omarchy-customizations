@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -54,11 +55,13 @@ Item {
   property real durationSeconds: 0
   property real playerVolume: 1
   property real rememberedPlayerVolume: 0.5
+  property bool playerMutedState: false
   property string playerTarget: ""
   property bool playerVolumeAvailable: false
   property bool adjustingPlayerVolume: false
   property bool volumeWritePending: false
   property bool queuedVolumeWrite: false
+  property string queuedPlayerAudioAction: ""
   property bool volumeReadQueued: false
   property real queuedPlayerVolume: 0
   property int volumeWriteRevision: 0
@@ -84,6 +87,12 @@ Item {
     (0.2126 * systemPalette.window.r + 0.7152 * systemPalette.window.g + 0.0722 * systemPalette.window.b) < 0.48
   readonly property bool isDark:
     widgetLayout.theme === "dark" || (widgetLayout.theme === "auto" && systemPrefersDark)
+  readonly property bool playerMuted: playerMutedState || playerVolume <= 0.001
+  readonly property bool playerVolumeControlEnabled:
+    !editing && playerVolumeAvailable && !playerMuted
+  readonly property bool playerVolumeSliderEnabled:
+    !editing && playerVolumeAvailable && (!playerMuted || adjustingPlayerVolume)
+  readonly property bool playerMuteButtonEnabled: !editing && playerVolumeAvailable
   readonly property color panelSurface: isDark
     ? Qt.rgba(0.067, 0.082, 0.075, widgetLayout.appearance.panelOpacity)
     : Qt.rgba(0.945, 0.953, 0.941, widgetLayout.appearance.panelOpacity)
@@ -171,18 +180,24 @@ Item {
       return
     }
     playerVolumeAvailable = true
-    if (!adjustingPlayerVolume) {
+    var muted = result.length > 2 ? result[2] === "1" : volume <= 0.001
+    playerMutedState = muted
+    if (muted && volume <= 0.001) {
+      if (playerVolume > 0.001) rememberedPlayerVolume = playerVolume
+      playerVolume = rememberedPlayerVolume > 0.001 ? rememberedPlayerVolume : 0
+    } else {
       playerVolume = volume
-      if (volume > 0) rememberedPlayerVolume = volume
+      if (volume > 0.001) rememberedPlayerVolume = volume
     }
   }
 
   function previewPlayerVolume(ratio) {
     ratio = Number(ratio)
-    if (!playerVolumeAvailable || !isFinite(ratio)) return
+    if (!playerVolumeAvailable || editing || !isFinite(ratio)
+        || (playerMuted && !adjustingPlayerVolume)) return
+    adjustingPlayerVolume = true
     playerVolume = Math.max(0, Math.min(1, ratio))
     if (playerVolume > 0) rememberedPlayerVolume = playerVolume
-    adjustingPlayerVolume = true
   }
 
   function endPlayerVolume() {
@@ -193,10 +208,16 @@ Item {
 
   function setPlayerVolume(value) {
     value = Number(value)
-    if (!playerVolumeAvailable || !isFinite(value)) return
+    if (!playerVolumeControlEnabled || !isFinite(value)) return
     playerVolume = Math.max(0, Math.min(1, value))
     if (playerVolume > 0) rememberedPlayerVolume = playerVolume
     writePlayerVolume(playerVolume)
+  }
+
+  function adjustPlayerVolume(delta) {
+    delta = Number(delta)
+    if (!playerVolumeControlEnabled || !isFinite(delta)) return
+    setPlayerVolume(playerVolume + delta)
   }
 
   function writePlayerVolume(value) {
@@ -204,25 +225,39 @@ Item {
     if (!isFinite(value) || !playerVolumeAvailable) return
     playerVolume = value
     if (value > 0) rememberedPlayerVolume = value
+    queuePlayerAudioWrite("volume-set", value)
+  }
+
+  function startPlayerAudioWrite(action, value) {
+    var command = ["sh", root.pluginDir + "/player-control.sh", action]
+    if (action === "volume-set" || action === "volume-unmute") {
+      command.push(Number(value).toFixed(2))
+    }
+    if (root.playerTarget !== "") command.push(root.playerTarget)
+    volumeWriteProcess.command = command
+    volumeWriteProcess.running = true
+  }
+
+  function queuePlayerAudioWrite(action, value) {
     volumeWriteRevision += 1
     if (volumeWriteProcess.running) {
+      queuedPlayerAudioAction = action
       queuedPlayerVolume = value
       queuedVolumeWrite = true
       volumeWritePending = true
       return
     }
     volumeWritePending = true
-    var command = ["sh", root.pluginDir + "/player-control.sh", "volume-set", value.toFixed(2)]
-    if (root.playerTarget !== "") command.push(root.playerTarget)
-    volumeWriteProcess.command = command
-    volumeWriteProcess.running = true
+    startPlayerAudioWrite(action, value)
   }
 
   function finishPlayerVolumeWrite(exitCode) {
     if (queuedVolumeWrite) {
+      var action = queuedPlayerAudioAction
       var nextVolume = queuedPlayerVolume
       queuedVolumeWrite = false
-      writePlayerVolume(nextVolume)
+      queuedPlayerAudioAction = ""
+      startPlayerAudioWrite(action, nextVolume)
       return
     }
     volumeWritePending = false
@@ -249,13 +284,17 @@ Item {
   }
 
   function toggleMute() {
-    if (!playerVolumeAvailable) return
-    if (playerVolume > 0) {
-      rememberedPlayerVolume = playerVolume
-      setPlayerVolume(0)
+    if (!playerMuteButtonEnabled) return
+    if (!playerMuted) {
+      if (playerVolume > 0.001) rememberedPlayerVolume = playerVolume
+      playerMutedState = true
+      queuePlayerAudioWrite("volume-mute", rememberedPlayerVolume)
       return
     }
-    setPlayerVolume(rememberedPlayerVolume > 0 ? rememberedPlayerVolume : 0.5)
+    var restoredVolume = rememberedPlayerVolume > 0.001 ? rememberedPlayerVolume : 0.5
+    playerMutedState = false
+    playerVolume = restoredVolume
+    queuePlayerAudioWrite("volume-unmute", restoredVolume)
   }
 
   function weatherLabel(code) {
@@ -759,22 +798,51 @@ Item {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
       exclusionMode: ExclusionMode.Ignore
 
-      Image {
+      Item {
+        id: panelBackground
         anchors.fill: parent
-        source: root.wallpaperUrl
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
-        smooth: true
-        opacity: root.wallpaperOpacity
-        visible: root.wallpaperOpacity > 0
+        layer.enabled: true
+        layer.smooth: true
+        layer.effect: MultiEffect {
+          maskEnabled: true
+          maskSource: panelCornerMask
+          maskThresholdMin: 0.5
+          maskSpreadAtMin: 0.02
+        }
+
+        Image {
+          anchors.fill: parent
+          source: root.wallpaperUrl
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+          smooth: true
+          opacity: root.wallpaperOpacity
+          visible: root.wallpaperOpacity > 0
+        }
+
+        Rectangle {
+          anchors.fill: parent
+          radius: 24
+          color: root.panelSurface
+        }
       }
 
       Rectangle {
         anchors.fill: parent
         radius: 24
-        color: root.panelSurface
+        color: "transparent"
         border.width: 1
         border.color: root.panelBorder
+      }
+
+      Rectangle {
+        id: panelCornerMask
+        anchors.fill: parent
+        radius: 24
+        color: "#FFFFFFFF"
+        antialiasing: true
+        visible: false
+        layer.enabled: true
       }
 
       Flickable {

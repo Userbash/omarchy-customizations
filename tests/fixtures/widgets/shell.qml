@@ -19,7 +19,11 @@ ShellRoot {
         playerTitle: dashboard.title,
         playerVolume: dashboard.playerVolume,
         rememberedVolume: dashboard.rememberedPlayerVolume,
+        playerMuted: dashboard.playerMuted,
         volumeAvailable: dashboard.playerVolumeAvailable,
+        volumeControlEnabled: dashboard.playerVolumeControlEnabled,
+        volumeSliderEnabled: dashboard.playerVolumeSliderEnabled,
+        muteButtonEnabled: dashboard.playerMuteButtonEnabled,
         volumeWritePending: dashboard.volumeWritePending,
         weatherTemp: dashboard.weatherTemp,
         weatherDesc: dashboard.weatherDesc,
@@ -65,8 +69,8 @@ ShellRoot {
       dashboard.previewPlayerVolume(value)
       dashboard.endPlayerVolume()
     }
-    function volumeUp(): void { dashboard.setPlayerVolume(dashboard.playerVolume + 0.05) }
-    function volumeDown(): void { dashboard.setPlayerVolume(dashboard.playerVolume - 0.05) }
+    function volumeUp(): void { dashboard.adjustPlayerVolume(0.05) }
+    function volumeDown(): void { dashboard.adjustPlayerVolume(-0.05) }
     function mute(): void { dashboard.toggleMute() }
     function refreshVolume(): void { dashboard.requestPlayerVolume() }
     function togglePlayback(): void { dashboard.togglePlayback() }

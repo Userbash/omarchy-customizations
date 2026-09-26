@@ -7,6 +7,7 @@ command -v jq >/dev/null || { printf 'SKIP — jq is not installed\n'; exit 0; }
 
 tmp=$(mktemp -d)
 qs_pid=""
+audio_pid=""
 cleanup() {
   local result=$?
   trap - ERR
@@ -16,6 +17,10 @@ cleanup() {
   if [[ -n $qs_pid ]]; then
     kill "$qs_pid" 2>/dev/null || true
     wait "$qs_pid" 2>/dev/null || true
+  fi
+  if [[ -n $audio_pid ]]; then
+    kill "$audio_pid" 2>/dev/null || true
+    wait "$audio_pid" 2>/dev/null || true
   fi
   rm -rf "$tmp"
   return "$result"
@@ -31,6 +36,9 @@ cp -a "$root/config/omarchy/plugins/widgets/." "$tmp/home/.config/omarchy/plugin
 printf '0.65\n' > "$tmp/volume"
 printf 'Playing\n' > "$tmp/status"
 printf '120\n' > "$tmp/position"
+sleep 30 &
+audio_pid=$!
+printf '42|%s|65|no\n99|1|100|no\n' "$audio_pid" > "$tmp/streams"
 
 cat > "$tmp/bin/playerctl" <<'SH'
 #!/bin/sh
@@ -77,6 +85,44 @@ esac
 SH
 chmod +x "$tmp/bin/playerctl"
 
+cat > "$tmp/bin/busctl" <<'SH'
+#!/bin/sh
+printf 'PID=%s\n' "$PLAYER_MPRIS_PID"
+SH
+cat > "$tmp/bin/pactl" <<'SH'
+#!/bin/sh
+case "${1:-}" in
+  list)
+    [ "${2:-}" = "sink-inputs" ] || exit 2
+    while IFS='|' read -r id pid volume muted; do
+      [ -n "$id" ] || continue
+      cat <<EOF
+Sink Input #$id
+    Mute: $muted
+    Volume: front-left: 65536 / ${volume}% / 0.00 dB, front-right: 65536 / ${volume}% / 0.00 dB
+    Properties:
+        application.process.id = "$pid"
+EOF
+    done < "$PACTL_STATE_FILE"
+    ;;
+  set-sink-input-volume)
+    awk -F'|' -v id="${2:-}" -v volume="${3%%%}" 'BEGIN { OFS = "|" } $1 == id { $3 = volume } { print }' \
+      "$PACTL_STATE_FILE" > "$PACTL_STATE_FILE.next"
+    mv "$PACTL_STATE_FILE.next" "$PACTL_STATE_FILE"
+    ;;
+  set-sink-input-mute)
+    muted="${3:-}"
+    [ "$muted" = "1" ] && muted=yes
+    [ "$muted" = "0" ] && muted=no
+    awk -F'|' -v id="${2:-}" -v muted="$muted" 'BEGIN { OFS = "|" } $1 == id { $4 = muted } { print }' \
+      "$PACTL_STATE_FILE" > "$PACTL_STATE_FILE.next"
+    mv "$PACTL_STATE_FILE.next" "$PACTL_STATE_FILE"
+    ;;
+  *) exit 2 ;;
+esac
+SH
+chmod +x "$tmp/bin/busctl" "$tmp/bin/pactl"
+
 cat > "$tmp/home/.local/share/omarchy/weather/weather-backend" <<'SH'
 #!/bin/sh
 printf '14.4 12.5 48 0 0.8 197 3 1 2\n'
@@ -90,6 +136,8 @@ export PLAYER_CONTROL_LOG="$tmp/playerctl.log"
 export PLAYERCTL_VOLUME_FILE="$tmp/volume"
 export PLAYERCTL_STATUS_FILE="$tmp/status"
 export PLAYERCTL_POSITION_FILE="$tmp/position"
+export PLAYER_MPRIS_PID="$$"
+export PACTL_STATE_FILE="$tmp/streams"
 
 quickshell --path "$tmp/config/shell.qml" > "$tmp/quickshell.log" 2>&1 &
 qs_pid=$!
@@ -199,27 +247,35 @@ call resetLayout
 step settings theme, wallpaper, opacity, weather icons, and saved layout
 
 call volume 0.32
-wait_for '.playerVolume == 0.32 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.32' ]]
+wait_for '.playerVolume == 0.32 and .playerMuted == false and .volumeWritePending == false'
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '32' ]]
+[[ $(< "$tmp/volume") == '0.65' ]]
 call volumeUp
 wait_for '.playerVolume == 0.37 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.37' ]]
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '37' ]]
 call volumeDown
 wait_for '.playerVolume == 0.32 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.32' ]]
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '32' ]]
 call previewVolume 0.77
 wait_for '.playerVolume == 0.77 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.77' ]]
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '77' ]]
+sleep 2.2
 call mute
-wait_for '.playerVolume == 0 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.00' ]]
+wait_for '.playerVolume == 0.77 and .playerMuted == true and .volumeControlEnabled == false and .volumeSliderEnabled == false and .muteButtonEnabled == true and .volumeWritePending == false'
+[[ $(awk -F'|' '$1 == 42 { print $4 }' "$tmp/streams") == 'yes' ]]
+call previewVolume 0.22
+call volumeUp
+wait_for '.playerVolume == 0.77 and .playerMuted == true'
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '77' ]]
 call mute
-wait_for '.playerVolume == 0.77 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.77' ]]
+wait_for '.playerVolume == 0.77 and .playerMuted == false and .volumeControlEnabled == true and .volumeSliderEnabled == true and .volumeWritePending == false'
+[[ $(awk -F'|' '$1 == 42 { print $4 }' "$tmp/streams") == 'no' ]]
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '77' ]]
 call volume 0.24
 call volume 0.58
 wait_for '.playerVolume == 0.58 and .volumeWritePending == false'
-[[ $(< "$tmp/volume") == '0.58' ]]
+[[ $(awk -F'|' '$1 == 42 { print $3 }' "$tmp/streams") == '58' ]]
+sleep 2.2
 call refreshVolume
 wait_for '.playerVolume == 0.58 and .volumeWritePending == false'
 step volume slider, buttons, mute, queued writes, and MPRIS readback

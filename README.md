@@ -109,6 +109,11 @@ A desktop dashboard for weather, CPU/GPU load, temperature, network activity,
 and MPRIS media playback. The dashboard keeps real backend data and separates
 the read-only display from its layout editor.
 
+The default screen follows a clear reading order: current weather first, a
+two-column system overview next, and a full-width media player below. Shared
+card shapes, restrained accent colors, rounded surfaces, and separate primary
+and secondary text levels keep status readable over the desktop wallpaper.
+
 - Drag sections by their grip and tiles by their card to reorder them or move
   them between sections. The media player stays in its protected Media section
   and cannot be moved as an individual tile.
@@ -121,17 +126,26 @@ the read-only display from its layout editor.
   size or the complete layout.
 - Choose automatic, light, or dark mode; select separate SVG wallpapers and
   wallpaper opacity for each theme; tune panel and tile opacity independently;
-  switch between minimal and color weather icons.
+  switch between minimal and color weather icons. The wallpaper and tinted
+  panel background are clipped to the panel's rounded outline, while the
+  weather, system, and media cards remain above that background.
 - Persist the versioned layout at
   `$XDG_STATE_HOME/omarchy/widgets/layout.json`, or at
   `~/.local/state/omarchy/widgets/layout.json` when `XDG_STATE_HOME` is unset.
 - Show the current track, artist, playback state, and elapsed/remaining time.
   Seek by dragging the progress bar or use the −10/+10-second controls. The
   central button toggles play/pause; right-click or a long press sends Stop.
-- Adjust the selected MPRIS player's own volume with a slider, mute toggle, and
-  small step buttons. Reads and writes use the same player target as the track
-  metadata and confirm changes against MPRIS; the widget does not change the
-  system-wide mixer level.
+- Adjust the selected player's application volume with a slider, mute toggle,
+  and small step buttons. `playerctl` provides the MPRIS target and playback
+  metadata; the volume helper matches that player's D-Bus owner process to its
+  PipeWire/PulseAudio sink inputs and reads back the actual application level.
+  It changes the selected application's streams without changing the
+  system-wide output or unrelated applications. If no matching sink input is
+  available, it falls back to the selected player's MPRIS volume.
+- Mute preserves the last non-zero level. The speaker button remains available
+  while muted, shows an animated mute badge, and restores the saved level when
+  clicked again. The slider and step buttons are disabled until audio is
+  restored, so polling cannot reset the saved level to a stale MPRIS value.
 
 The widget interaction contract and isolated Quickshell/MPRIS end-to-end
 scenario are included in `bash scripts/check.sh` when `quickshell` is installed.

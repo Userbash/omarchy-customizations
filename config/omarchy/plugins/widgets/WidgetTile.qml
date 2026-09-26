@@ -643,25 +643,58 @@ Item {
             border.color: muteMouse.containsMouse ? root.dashboard.surfaceBorder : "transparent"
             opacity: muteMouse.enabled ? 1 : 0.48
             Accessible.role: Accessible.Button
-            Accessible.name: root.dashboard.playerVolume > 0 ? "Выключить звук" : "Включить звук"
+            Accessible.name: root.dashboard.playerMuted ? "Включить звук" : "Выключить звук"
 
             Text {
               anchors.centerIn: parent
-              text: root.dashboard.playerVolume > 0 ? "◖))" : "◖×"
+              text: "◖))"
               color: root.dashboard.accentColor
               font.family: root.dashboard.uiFont
               font.pixelSize: 11
             }
 
+            Rectangle {
+              id: muteBadge
+              width: 12
+              height: 12
+              radius: 6
+              anchors.right: parent.right
+              anchors.bottom: parent.bottom
+              anchors.rightMargin: 0
+              anchors.bottomMargin: 0
+              color: root.dashboard.accentColor
+              border.width: 1
+              border.color: root.dashboard.tileSurface
+              opacity: root.dashboard.playerMuted ? 1 : 0
+              scale: root.dashboard.playerMuted ? 1 : 0.45
+              visible: opacity > 0.01
+
+              Behavior on opacity {
+                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+              }
+              Behavior on scale {
+                NumberAnimation { duration: 150; easing.type: Easing.OutBack }
+              }
+
+              Text {
+                anchors.centerIn: parent
+                text: "×"
+                color: "#FFFFFFFF"
+                font.family: root.dashboard.uiFont
+                font.pixelSize: 9
+                font.bold: true
+              }
+            }
+
             MouseArea {
               id: muteMouse
               anchors.fill: parent
-              enabled: !root.dashboard.editing && root.dashboard.playerVolumeAvailable
+              enabled: root.dashboard.playerMuteButtonEnabled
               hoverEnabled: true
               acceptedButtons: Qt.LeftButton
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
               Accessible.role: Accessible.Button
-              Accessible.name: root.dashboard.playerVolume > 0 ? "Выключить звук" : "Включить звук"
+              Accessible.name: root.dashboard.playerMuted ? "Включить звук" : "Выключить звук"
               onClicked: root.dashboard.toggleMute()
             }
           }
@@ -688,11 +721,11 @@ Item {
             MouseArea {
               id: volumeDownMouse
               anchors.fill: parent
-              enabled: !root.dashboard.editing && root.dashboard.playerVolumeAvailable
+              enabled: root.dashboard.playerVolumeControlEnabled
               hoverEnabled: true
               acceptedButtons: Qt.LeftButton
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-              onClicked: root.dashboard.setPlayerVolume(root.dashboard.playerVolume - 0.05)
+              onClicked: root.dashboard.adjustPlayerVolume(-0.05)
             }
           }
 
@@ -702,9 +735,12 @@ Item {
             Layout.minimumWidth: 90
             Layout.maximumWidth: 120
             Layout.preferredHeight: 30
+            opacity: root.dashboard.playerVolumeSliderEnabled ? 1 : 0.45
             Accessible.role: Accessible.Slider
             Accessible.name: "Громкость медиаплеера"
-            Accessible.description: root.dashboard.playerVolumeAvailable ? Math.round(root.dashboard.playerVolume * 100) + "%" : "Недоступно"
+            Accessible.description: root.dashboard.playerMuted
+              ? "Звук отключён. Нажмите значок динамика, чтобы включить его."
+              : root.dashboard.playerVolumeAvailable ? Math.round(root.dashboard.playerVolume * 100) + "%" : "Недоступно"
 
             Rectangle {
               anchors.verticalCenter: parent.verticalCenter
@@ -736,7 +772,7 @@ Item {
               id: volumeMouse
               anchors.fill: parent
               preventStealing: true
-              enabled: !root.dashboard.editing && root.dashboard.playerVolumeAvailable
+              enabled: root.dashboard.playerVolumeSliderEnabled
               hoverEnabled: true
               acceptedButtons: Qt.LeftButton
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
@@ -773,11 +809,11 @@ Item {
             MouseArea {
               id: volumeUpMouse
               anchors.fill: parent
-              enabled: !root.dashboard.editing && root.dashboard.playerVolumeAvailable
+              enabled: root.dashboard.playerVolumeControlEnabled
               hoverEnabled: true
               acceptedButtons: Qt.LeftButton
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-              onClicked: root.dashboard.setPlayerVolume(root.dashboard.playerVolume + 0.05)
+              onClicked: root.dashboard.adjustPlayerVolume(0.05)
             }
           }
 
