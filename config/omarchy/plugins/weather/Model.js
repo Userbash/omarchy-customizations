@@ -1,19 +1,30 @@
 // weather.json holds {"name": ..., "latitude": ..., "longitude": ...} (see
 // omarchy-weather-location, which owns the format). Missing, blank, or
 // unparseable means the location is auto-detected from the IP address.
+function parseCoordinate(value, minimum, maximum) {
+  var text = value === undefined || value === null ? "" : String(value).replace(/^\s+|\s+$/g, "")
+  if (!text || !/^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(text)) return null
+  var number = Number(text)
+  return isFinite(number) && number >= minimum && number <= maximum ? number : null
+}
+
+function hasCoordinates(latitude, longitude) {
+  return parseCoordinate(latitude, -90, 90) !== null && parseCoordinate(longitude, -180, 180) !== null
+}
+
 function parseLocationFile(raw) {
   var unset = { name: "", latitude: null, longitude: null }
   try {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return unset
 
-    var latitude = parseFloat(data.latitude)
-    var longitude = parseFloat(data.longitude)
-    var hasCoordinates = !isNaN(latitude) && !isNaN(longitude)
+    var latitude = parseCoordinate(data.latitude, -90, 90)
+    var longitude = parseCoordinate(data.longitude, -180, 180)
+    var hasValidCoordinates = latitude !== null && longitude !== null
     return {
-      name: typeof data.name === "string" ? data.name.replace(/^\s+|\s+$/g, "") : "",
-      latitude: hasCoordinates ? latitude : null,
-      longitude: hasCoordinates ? longitude : null
+      name: typeof data.name === "string" ? data.name.replace(/^\s+|\s+$/g, "").slice(0, 128) : "",
+      latitude: hasValidCoordinates ? latitude : null,
+      longitude: hasValidCoordinates ? longitude : null
     }
   } catch (e) {
     return unset
@@ -24,11 +35,11 @@ function parseLocationFile(raw) {
 // both are present, the URL-encoded name as a fallback (hand-edited
 // weather.loc files may only carry a name), empty for IP auto-detect.
 function wttrLocationQuery(location, latitude, longitude) {
-  var lat = parseFloat(String(latitude))
-  var lon = parseFloat(String(longitude))
-  if (!isNaN(lat) && !isNaN(lon)) return lat + "," + lon
+  var lat = parseCoordinate(latitude, -90, 90)
+  var lon = parseCoordinate(longitude, -180, 180)
+  if (lat !== null && lon !== null) return lat + "," + lon
 
-  var name = String(location || "").replace(/^\s+|\s+$/g, "")
+  var name = String(location || "").replace(/^\s+|\s+$/g, "").slice(0, 128)
   return name === "" ? "" : encodeURIComponent(name)
 }
 
@@ -43,12 +54,15 @@ function parseGeocodingResults(raw) {
     for (var i = 0; i < results.length; i++) {
       var r = results[i]
       if (!r || !r.name || r.latitude === undefined || r.longitude === undefined) continue
+      var latitude = parseCoordinate(r.latitude, -90, 90)
+      var longitude = parseCoordinate(r.longitude, -180, 180)
+      if (latitude === null || longitude === null) continue
       var region = [r.admin1, r.country].filter(function(part) { return !!part }).join(", ")
       out.push({
-        name: String(r.name),
+        name: String(r.name).slice(0, 128),
         description: region,
-        latitude: r.latitude,
-        longitude: r.longitude
+        latitude: latitude,
+        longitude: longitude
       })
     }
     return out
@@ -58,7 +72,7 @@ function parseGeocodingResults(raw) {
 }
 
 function locationCommit(text, suggestions, selectedIndex) {
-  var name = String(text || "").replace(/^\s+|\s+$/g, "")
+  var name = String(text || "").replace(/^\s+|\s+$/g, "").slice(0, 128)
   if (name === "") return { name: "", latitude: null, longitude: null }
 
   var choices = suggestions || []
@@ -268,6 +282,8 @@ function iconForCode(code, night) {
 if (typeof module !== "undefined") {
   module.exports = {
     parseLocationFile: parseLocationFile,
+    parseCoordinate: parseCoordinate,
+    hasCoordinates: hasCoordinates,
     wttrLocationQuery: wttrLocationQuery,
     parseGeocodingResults: parseGeocodingResults,
     locationCommit: locationCommit,

@@ -133,8 +133,8 @@ Panel {
 
   // wttr's current conditions when available; open-meteo's (bundled with the
   // much faster daily forecast fetch) fill the hero while wttr is in flight.
-  readonly property bool hasConfiguredCoordinates: !isNaN(parseFloat(String(effectiveLocationState.latitude))) && !isNaN(parseFloat(String(effectiveLocationState.longitude)))
-  readonly property bool hasManualCoordinates: !isNaN(parseFloat(String(configuredLocationState.latitude))) && !isNaN(parseFloat(String(configuredLocationState.longitude)))
+  readonly property bool hasConfiguredCoordinates: Model.hasCoordinates(effectiveLocationState.latitude, effectiveLocationState.longitude)
+  readonly property bool hasManualCoordinates: Model.hasCoordinates(configuredLocationState.latitude, configuredLocationState.longitude)
   readonly property var openMeteoCurrent: Model.openMeteoCurrentCondition(dailyForecastReport)
   readonly property var current: (hasConfiguredCoordinates && openMeteoCurrent) ? openMeteoCurrent : ((report && report.current_condition && report.current_condition[0]) ? report.current_condition[0] : openMeteoCurrent)
   readonly property var areaInfo: report && report.nearest_area && report.nearest_area[0] ? report.nearest_area[0] : null
@@ -144,7 +144,7 @@ Panel {
   readonly property bool useImperial: Model.shouldUseImperial(setting("unit", ""), Qt.locale().name, reportCountry)
 
   // Auto-refresh interval in minutes; clamped to a sane minimum.
-  readonly property int refreshMinutes: Math.max(1, parseInt(setting("refreshMinutes", 15), 10) || 15)
+  readonly property int refreshMinutes: Math.max(1, Math.min(1440, parseInt(setting("refreshMinutes", 15), 10) || 15))
 
   readonly property string reportLocation:  configuredLocation || wttrLocation || (areaInfo && areaInfo.areaName && areaInfo.areaName[0] ? areaInfo.areaName[0].value : "")
   readonly property string reportTempNum:   current ? String(useImperial ? current.temp_F : current.temp_C) : ""
@@ -170,15 +170,15 @@ Panel {
   function refreshDailyForecast(sourceReport) {
     if (dailyForecastProc.running) return
 
-    var lat = parseFloat(String(root.effectiveLocationState.latitude))
-    var lon = parseFloat(String(root.effectiveLocationState.longitude))
-    if (isNaN(lat) || isNaN(lon)) {
+    var lat = Model.parseCoordinate(root.effectiveLocationState.latitude, -90, 90)
+    var lon = Model.parseCoordinate(root.effectiveLocationState.longitude, -180, 180)
+    if (lat === null || lon === null) {
       var area = sourceReport && sourceReport.nearest_area && sourceReport.nearest_area[0] ? sourceReport.nearest_area[0] : root.areaInfo
       if (!area) return
-      lat = parseFloat(String(area.latitude || ""))
-      lon = parseFloat(String(area.longitude || ""))
+      lat = Model.parseCoordinate(area.latitude, -90, 90)
+      lon = Model.parseCoordinate(area.longitude, -180, 180)
     }
-    if (isNaN(lat) || isNaN(lon)) return
+    if (lat === null || lon === null) return
 
     var url = "https://api.open-meteo.com/v1/forecast"
       + "?latitude=" + encodeURIComponent(String(lat))
@@ -187,7 +187,7 @@ Panel {
       + "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day"
       + "&forecast_days=4"
       + "&timezone=auto"
-    dailyForecastProc.command = ["curl", "-fsS", "--max-time", "5", url]
+    dailyForecastProc.command = ["curl", "-fsS", "--max-time", "5", "--max-filesize", "262144", url]
     dailyForecastProc.running = true
   }
 
@@ -278,7 +278,7 @@ Panel {
 
   function startGeocode() {
     geocodeActiveQuery = geocodePendingQuery
-    geocodeProc.command = ["curl", "-fsS", "--max-time", "5",
+    geocodeProc.command = ["curl", "-fsS", "--max-time", "5", "--max-filesize", "262144",
       "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(geocodeActiveQuery) + "&count=5&language=en&format=json"]
     geocodeProc.running = true
   }
@@ -336,7 +336,7 @@ Panel {
 
   Process {
     id: forecastProc
-    command: ["curl", "-fsS", "--max-time", "10", "https://wttr.in/" + root.locationQuery + "?format=j1"]
+    command: ["curl", "-fsS", "--max-time", "10", "--max-filesize", "262144", "https://wttr.in/" + root.locationQuery + "?format=j1"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -633,6 +633,7 @@ Panel {
               width: Style.space(190)
               enabled: !root.savingLocation
               placeholderText: "Search city"
+              maximumLength: 128
               foreground: root.bar.foreground
               font.family: root.bar.fontFamily
 

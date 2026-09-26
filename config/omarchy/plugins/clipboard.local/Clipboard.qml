@@ -6,7 +6,6 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 import "ClipboardHistory.js" as ClipboardHistory
-import "ClipboardAdapter.js" as ClipboardAdapter
 import "KeyboardActions.js" as KeyboardActions
 
 Item {
@@ -41,9 +40,7 @@ Item {
   property int cardHeight: Math.min(Style.space(600), panel.height - Style.gapsOut * 2)
   property int rowHeight: Math.max(Style.space(50), Style.font.body + Style.font.caption + Style.spacing.rowPaddingX * 2)
   property int historyLimit: 100
-  property var tabs: ["All", "Text", "Images", "Screenshots", "Files", "Pinned"]
   property bool gridMode: false
-  property var stats: ({ total: 0, bytes: 0, freeBytes: 0 })
 
   function open(payloadJson) {
     root.opened = true
@@ -64,11 +61,6 @@ Item {
     if (root.opened) root.close()
     else root.open("{}")
   }
-
-  // Adapter contract: UI actions are routed through one backend boundary.
-  function getStats() { return ClipboardAdapter.getStats() }
-  function pinItem(id, pinned) { return ClipboardAdapter.pinItem(id, pinned) }
-  function saveAs(id, path) { return ClipboardAdapter.saveAs(id, path) }
 
   function normalizeEntry(value) {
     return ClipboardHistory.normalizeEntry(value)
@@ -271,8 +263,6 @@ Item {
     }
     if (action === "copy") return root.copyIndex(root.selectedIndex)
     if (action === "open") return root.openIndex(root.selectedIndex)
-    if (action === "saveAs") return root.saveAs(root.selectedIndex, "")
-    if (action === "pin") return root.pinItem(root.selectedIndex, true)
     if (action === "clearAll") return root.requestClearHistory()
   }
 
@@ -544,6 +534,8 @@ Item {
                       width: visible ? parent.height : 0
                       height: parent.height
                       source: parent.parent.previewImage
+                      sourceSize.width: width * Screen.devicePixelRatio
+                      sourceSize.height: height * Screen.devicePixelRatio
                       fillMode: Image.PreserveAspectFit
                       asynchronous: true
                       smooth: true
@@ -593,6 +585,8 @@ Item {
                   Image {
                     anchors.fill: parent
                     source: previewImage
+                    sourceSize.width: width * Screen.devicePixelRatio
+                    sourceSize.height: height * Screen.devicePixelRatio
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                   }
@@ -641,6 +635,8 @@ Item {
                 anchors.topMargin: 0
                 anchors.bottomMargin: 0
                 source: parent.activeRow ? parent.activeRow.previewImage : ""
+                sourceSize.width: width * Screen.devicePixelRatio
+                sourceSize.height: height * Screen.devicePixelRatio
                 fillMode: Image.PreserveAspectFit
                 verticalAlignment: Image.AlignTop
                 asynchronous: true
@@ -654,19 +650,9 @@ Item {
                 anchors.leftMargin: root.contentMargin
                 spacing: Style.space(6)
                 Button {
-                  width: (parent.width - root.contentMargin - Style.space(12)) / 3
-                  text: KeyboardActions.labels().saveAs
-                  onClicked: root.saveAs(root.selectedIndex, "")
-                }
-                Button {
-                  width: (parent.width - root.contentMargin - Style.space(12)) / 3
+                  width: parent.width - root.contentMargin
                   text: KeyboardActions.labels().clearAll
                   onClicked: root.requestClearHistory()
-                }
-                Button {
-                  width: (parent.width - root.contentMargin - Style.space(12)) / 3
-                  text: KeyboardActions.labels().pin
-                  onClicked: root.pinItem(root.selectedIndex, true)
                 }
               }
             }
@@ -674,7 +660,7 @@ Item {
 
           Text {
             anchors.bottom: parent.bottom
-            text: root.stats.total + " items · " + root.stats.bytes + " bytes / " + root.stats.freeBytes + " free"
+            text: root.history.length + " clipboard items"
             color: root.foreground
           }
 

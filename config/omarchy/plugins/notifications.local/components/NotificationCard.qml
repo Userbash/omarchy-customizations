@@ -36,7 +36,7 @@ BorderSurface {
   signal cardClicked()
   // Prefer per-notification media/avatar data, then fall back to the app icon.
   // The `check` flag avoids Qt's missing-texture placeholder for unknown names.
-  readonly property string smallIconSource: image.length > 0 ? image : iconSource(appIcon)
+  readonly property string smallIconSource: NotificationLogic.safeImageSource(image, false) || iconSource(appIcon)
   readonly property bool hasGlyph: glyph.length > 0
   readonly property bool compactGlyph: NotificationLogic.shouldRenderCompactGlyph(glyph, smallIconSource, singleLineToast)
   readonly property bool hasSmallIcon: smallIconSource.length > 0
@@ -56,10 +56,9 @@ BorderSurface {
   }
 
   function iconSource(icon) {
-    var value = String(icon || "")
+    var value = NotificationLogic.safeImageSource(icon, true)
     if (value.length === 0) return ""
-    if (value.indexOf("file://") === 0 || value.indexOf("image://") === 0) return value
-    if (value.charAt(0) === "/") return Util.fileUrl(value)
+    if (!NotificationLogic.isThemeIconName(value)) return value
     return Quickshell.iconPath(value, true)
   }
 

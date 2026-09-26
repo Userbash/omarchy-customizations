@@ -7,6 +7,8 @@ are installed under the user's home directory.
 
 [Watch the Omarchy desktop demo](docs/media/omarchy-demo.mp4)
 
+[Watch the UI reference from 01:35 on YouTube](https://www.youtube.com/watch?v=J4LdlUgOGe8&t=95s)
+
 ## What This Repository Provides
 
 ### Hyprland configuration
@@ -18,7 +20,7 @@ are installed under the user's home directory.
 - optional monitor and scale overrides through `OMARCHY_MONITOR` and
   `OMARCHY_SCALE`;
 - startup hooks and Omarchy defaults;
-- the glass layer used by the desktop widgets.
+- the subtle blur and alpha rules used by the desktop widgets.
 
 The configuration is expressed as Omarchy-compatible user files, so package
 updates do not overwrite it.
@@ -28,7 +30,7 @@ updates do not overwrite it.
 All plugins are regular Quickshell components. They use the existing Omarchy
 theme, spacing, icon, and popup primitives instead of replacing the shell.
 
-The repository currently tracks the ten user plugins installed on the desktop:
+The repository ships configuration for ten Quickshell plugins:
 
 - `health` reports CPU, memory, disk, and temperature values.
 - `kvm-status` reports `/dev/kvm`, loaded KVM modules, running virtual-machine
@@ -46,7 +48,7 @@ The repository currently tracks the ten user plugins installed on the desktop:
 - `clipboard.local` captures local clipboard history and exposes the overlay
   actions described below.
 - `music-desktop` renders the click-through desktop music visualizer and clock.
-- `widgets` renders the desktop system, network, weather, and music cards.
+- `widgets` renders the editable weather, system, network, and media dashboard.
 
 `kvm-status`, `health`, and the metric backends use defensive parsing and
 portable paths. A missing device, process, or metric is represented as an
@@ -75,14 +77,17 @@ The overlay keeps keyboard handling local to the focused clipboard surface:
 | `Enter` | Paste the selected item |
 | `Shift+Enter` | Copy the selected item |
 | `Alt+Enter` | Open the selected item with the desktop handler |
-| `Ctrl+S` | Save the selected item as a file |
-| `Ctrl+P` | Pin the selected item |
 | `Ctrl+Delete` or `Delete` | Confirm, then clear the full history |
 | `Esc` | Clear the filter, or close the overlay when it is empty |
 
-The footer uses three equal-width buttons so labels remain readable at narrow
-panel sizes. The capture helper applies `umask 077`; runtime history and image
-files stay private in the user's state directory.
+The capture helper applies `umask 077`; runtime history and image files stay
+private in the user's state directory. To limit memory and disk use, it skips
+text entries larger than 256 KiB, images larger than 2 MiB, and keeps at most
+100 cached images.
+
+Only `Ctrl+Delete` is handled by the shortcut map; the focused overlay also
+routes `Delete` to the same confirmation flow. Save-as and pin actions are not
+exposed because this plugin does not implement those operations.
 
 #### `notifications.local` and `notifications-indicator`
 
@@ -92,15 +97,37 @@ indicator supports opening history, marking notifications read, and clearing
 entries. Runtime history lives below `~/.local/state/omarchy/notifications/`
 and is excluded from version control.
 
-#### `music-desktop` and `widgets`
+#### `music-desktop`
 
-Desktop-layer widgets for music, weather, network, system metrics, and the
-visualizer. They are click-through where appropriate and use the Omarchy glass
-surface without adding a separate window-manager layer.
+The click-through desktop music visualizer and clock. Spectrum parsing and cat
+motion are isolated in small JavaScript modules, with bounded Cava restart and
+stale-data handling.
 
-The desktop layers use user-specific namespaces (`sanya-music-desktop` and
-`sanya-widgets`) so they do not collide with another shell surface using an
-older generic namespace.
+#### `widgets`
+
+A desktop dashboard for weather, CPU/GPU load, temperature, network activity,
+and MPRIS media playback. The dashboard keeps real backend data and separates
+the read-only display from its layout editor.
+
+- Reorder tiles within a section or move them between sections by dragging.
+- Add, remove, rename, reorder, and reset sections. Add or remove tiles from a
+  catalog, resize supported tiles across a two-column grid, and reset a tile's
+  size or the complete layout.
+- Choose automatic, light, or dark mode; select separate SVG wallpapers and
+  wallpaper opacity for each theme; tune panel and tile opacity independently;
+  switch between minimal and color weather icons.
+- Persist the versioned layout at
+  `$XDG_STATE_HOME/omarchy/widgets/layout.json`, or at
+  `~/.local/state/omarchy/widgets/layout.json` when `XDG_STATE_HOME` is unset.
+- Show the current track, artist, playback state, and elapsed/remaining time.
+  Seek by dragging the progress bar or use the −10/+10-second controls. The
+  central button toggles play/pause; right-click or a long press sends Stop.
+- Adjust the selected MPRIS player's own volume with a slider, mute toggle, and
+  small step buttons. Reads and writes use the same player target as the track
+  metadata; the widget does not change the system-wide mixer level.
+
+The layout editor and appearance controls are documented in
+[the 26 September change notes](docs/2026-09-26.md).
 
 #### `omarchy.bluetooth`
 
@@ -110,7 +137,7 @@ pairing, connection and disconnection, forgetting paired devices, keyboard
 navigation, and accessible action feedback.
 
 This repository does not replace that panel with a custom Bluetooth command
-runner. The custom VPN widget uses the `sanya.*` IPC namespace so it cannot
+runner. The custom VPN widget uses a dedicated IPC namespace so it does not
 collide with Omarchy's built-in targets during shell reloads.
 
 #### `bluetooth-battery`
@@ -253,6 +280,9 @@ node tests/test_notifications_logic.js
 PYTHONPATH=backend python -m unittest discover -s tests -q
 ```
 
+See the [test guide](tests/README.md) for all focused tests and the separate
+live smoke checks.
+
 These checks cover the shortcut map, clipboard manifest and shell syntax,
 music animation logic, notification input handling, backend JSON contracts,
 and read-only VPN/Bluetooth probes. They do not require a live VPN connection
@@ -260,10 +290,13 @@ or modify network configuration.
 
 ## Privacy and portability
 
-This repository contains no credentials, private keys, tokens, passwords,
-notification databases, screenshots, or machine-specific home-directory
-paths. Runtime state is generated locally and ignored by Git. The only
-network-facing service is the loopback monitor on `127.0.0.1:8765`.
+Screenshots in `docs/media/` and the desktop demo are intentional documentation
+assets. Runtime databases and state are generated locally and ignored by Git.
+Source and documentation paths use `$HOME` or XDG locations rather than an
+author-specific absolute home path. A targeted audit of the current
+non-ignored tree found no high-confidence credential patterns or absolute
+home-directory paths; the audit notes also record a path in older Git history.
+The only local API service listens on `127.0.0.1:8765`.
 
 The backend discovers the optional Throne client through `PATH` and process
 metadata; it does not depend on a particular user's home directory. Bluetooth
@@ -298,6 +331,22 @@ the user unit. To inspect its decisions:
 journalctl --user -u llama-game-guard.service -f
 ~/.local/bin/llama-game-guard --dry-run --once
 ```
+
+## Changes on 26 September 2026
+
+The desktop widget was redesigned around a consistent two-column tile grid and
+matte cards, with light/dark themes, adjustable wallpaper and surface opacity,
+and a persistent layout editor. The media card now uses one stable MPRIS target
+for metadata, transport, seeking, and player volume. The weather, notification,
+clipboard, KVM, VPN, monitor configuration, and install/uninstall paths received
+input bounds, safer parsing, or additional regression coverage. Detailed
+interaction, implementation, and verification notes are in
+[docs/2026-09-26.md](docs/2026-09-26.md).
+
+![Live Omarchy desktop dashboard](docs/media/widgets-dashboard-live.png)
+
+Additional screenshots cover both themes, the tile editor, appearance
+settings, and the media controls. See the change notes for the complete list.
 
 ## Changes from 25 September 2026
 
@@ -344,9 +393,9 @@ an active tunnel.
 
 ### Demo media
 
-The README demo is now an AV1 MP4 without an audio track:
-`docs/media/omarchy-demo.mp4`. The previous GIF has been removed. The source
-file was `/home/sanya/Videos/Video_2026-09-25_15-02-23_av1_noaudio.mp4`.
+The README demo is an AV1 MP4 without an audio track:
+`docs/media/omarchy-demo.mp4`. The previous GIF has been removed; the source
+video was transcoded locally.
 
 ### Verification
 

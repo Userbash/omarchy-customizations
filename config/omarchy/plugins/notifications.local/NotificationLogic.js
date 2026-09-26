@@ -189,10 +189,10 @@ function snapshotOf(notification, timestamp) {
     id: id,
     originalId: id,
     app: n.appName || "",
-    appIcon: n.appIcon || "",
+    appIcon: safeImageSource(n.appIcon, true),
     summary: String(n.summary || ""),
     body: n.body || "",
-    image: n.image || "",
+    image: safeImageSource(n.image, false),
     glyph: glyphFromHints(n.hints),
     execArgv: execArgvFromHints(n.hints),
     urgency: n.urgency,
@@ -240,10 +240,10 @@ function historyEntry(value, normalUrgency) {
     id: e.id || 0,
     originalId: e.originalId || e.id || 0,
     app: e.app || "",
-    appIcon: e.appIcon || "",
+    appIcon: safeImageSource(e.appIcon, true),
     summary: e.summary || "",
     body: e.body || "",
-    image: e.image || "",
+    image: safeImageSource(e.image, false),
     glyph: e.glyph || "",
     execArgv: e.execArgv || "",
     urgency: typeof e.urgency === "number" ? e.urgency : normalUrgency,
@@ -314,15 +314,60 @@ function imageStem(entry) {
   return String(e.timestamp || 0) + "-" + String(e.originalId || 0)
 }
 
+function isThemeIconName(value) {
+  var s = String(value || "")
+  return s.length > 0 && s.length <= 4096 && s.indexOf("/") === -1 &&
+    !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(s) && !/[\u0000-\u001f\u007f]/.test(s)
+}
+
+// Notification image hints are sender controlled. QML's Image element will
+// fetch http(s) URLs without a click, which leaks the user's address and can
+// load attacker controlled image data into the shell. Only accept local files,
+// Qt's in-process image providers and bundled resources. App icons may also be
+// freedesktop theme names, which are resolved locally by Quickshell.
+function safeImageSource(value, allowThemeName) {
+  var s = String(value || "")
+  if (!s || s.length > 4096 || /[\u0000-\u001f\u007f]/.test(s)) return ""
+  var localPath = localImageFile(s)
+  if (localPath) return s.charAt(0) === "/" ? localFileUrl(localPath) : s
+  if (/^image:\/\/[A-Za-z0-9_.-]+\/[^\s]*$/.test(s)) return s
+  if (/^qrc:\/(?!\/)[^\s]*$/.test(s) || /^qrc:\/\/\/[^\s]*$/.test(s)) return s
+  return allowThemeName && isThemeIconName(s) ? s : ""
+}
+
+function localFileUrl(path) {
+  var value = String(path || "")
+  if (value.charAt(0) !== "/") return ""
+  try {
+    return "file://" + value.split("/").map(function(part) {
+      return encodeURIComponent(part)
+    }).join("/")
+  } catch (e) {
+    return ""
+  }
+}
+
 // The filesystem path behind a file-backed image value, or "" for anything
 // a copy can't capture: themed icon names, in-process image:// URLs, empty.
 function localImageFile(value) {
   var s = String(value || "")
-  if (s.indexOf("file://") === 0) {
+  var encodedUrl = false
+  if (s.indexOf("file:///") === 0) {
     s = s.slice(7)
-    try { s = decodeURIComponent(s) } catch (e) {}
+    encodedUrl = true
+  } else if (s.indexOf("file://localhost/") === 0) {
+    s = "/" + s.slice(17)
+    encodedUrl = true
+  } else if (s.indexOf("file://") === 0) {
+    return ""
   }
-  return s.charAt(0) === "/" ? s : ""
+  if (s.charAt(0) === "/") {
+    if (encodedUrl) {
+      try { s = decodeURIComponent(s) } catch (e) {}
+    }
+    return s
+  }
+  return ""
 }
 
 // The entry as it should hit the disk, plus the copies that make it true.
@@ -336,13 +381,14 @@ function persistablePopup(entry, imagesDir) {
   var copies = []
   for (var i = 0; i < PERSISTED_IMAGE_ROLES.length; i++) {
     var role = PERSISTED_IMAGE_ROLES[i]
-    var value = String(out[role] || "")
+    var value = safeImageSource(out[role], role === "appIcon")
+    out[role] = value
     if (!value) continue
     var source = localImageFile(value)
     if (source) {
       var copy = String(imagesDir || "") + imageStem(e) + "-" + role
       if (source !== copy) copies.push({ from: source, to: copy })
-      out[role] = "file://" + copy
+      out[role] = localFileUrl(copy)
     } else if (value.indexOf("image://") === 0) {
       out[role] = ""
     }
@@ -459,6 +505,8 @@ if (typeof module !== "undefined") {
     execArgvFromHints: execArgvFromHints,
     parseExecArgv: parseExecArgv,
     shouldRenderCompactGlyph: shouldRenderCompactGlyph,
+    isThemeIconName: isThemeIconName,
+    safeImageSource: safeImageSource,
     snapshotOf: snapshotOf,
     popupRoles: popupRoles,
     popupRowChanged: popupRowChanged,

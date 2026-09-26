@@ -11,6 +11,48 @@ test("image tags are removed before StyledText rendering", () => {
   assert.equal(logic.styledBody(body, "app", ""), "hello  world")
 })
 
+test("notification image sources cannot trigger remote fetches", () => {
+  assert.equal(logic.safeImageSource("https://example.invalid/pixel.png", false), "")
+  assert.equal(logic.safeImageSource("http://127.0.0.1:8080/", false), "")
+  assert.equal(logic.safeImageSource("data:image/png;base64,AAAA", false), "")
+  assert.equal(logic.safeImageSource("file://evil.invalid/share/image.png", false), "")
+  assert.equal(logic.safeImageSource("file:///tmp/image.png", false), "file:///tmp/image.png")
+  assert.equal(logic.safeImageSource("file://localhost/tmp/image.png", false), "file://localhost/tmp/image.png")
+  assert.equal(logic.safeImageSource("image://notifications/preview", false), "image://notifications/preview")
+  assert.equal(logic.safeImageSource("qrc:/icons/app.svg", false), "qrc:/icons/app.svg")
+  assert.equal(logic.safeImageSource("org.example.Player", true), "org.example.Player")
+  assert.equal(logic.safeImageSource("https://example.invalid/icon.png", true), "")
+  assert.equal(logic.safeImageSource("/tmp/a b.png", false), "file:///tmp/a%20b.png")
+  assert.equal(logic.safeImageSource("/tmp/a%20b.png", true), "file:///tmp/a%2520b.png")
+  assert.equal(logic.localImageFile("file:///tmp/a%20b.png"), "/tmp/a b.png")
+  assert.equal(logic.localImageFile("/tmp/a%20b.png"), "/tmp/a%20b.png")
+})
+
+test("persisted notifications discard remote image values", () => {
+  const persisted = logic.persistablePopup({
+    timestamp: 10,
+    originalId: 2,
+    appIcon: "https://example.invalid/icon.png",
+    image: "https://example.invalid/pixel.png"
+  }, "/tmp/notifications/images/")
+  assert.equal(persisted.entry.appIcon, "")
+  assert.equal(persisted.entry.image, "")
+  assert.equal(persisted.copies.length, 0)
+})
+
+test("persisted local images use escaped file URLs and preserve literal percent signs", () => {
+  const persisted = logic.persistablePopup({
+    timestamp: 10,
+    originalId: 2,
+    appIcon: "/tmp/a%20b.png"
+  }, "/tmp/notifications images/")
+  assert.equal(persisted.entry.appIcon, "file:///tmp/notifications%20images/10-2-appIcon")
+  assert.deepEqual(persisted.copies, [{
+    from: "/tmp/a%20b.png",
+    to: "/tmp/notifications images/10-2-appIcon"
+  }])
+})
+
 test("non-image markup is retained for the documented body capability", () => {
   assert.equal(logic.styledBody("<b>hello</b>", "app", ""), "<b>hello</b>")
 })

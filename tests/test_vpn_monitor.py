@@ -381,7 +381,16 @@ class SystemDiagnosticsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RealSystem.curl_route_options(interface="host!example.invalid")
         with self.assertRaises(ValueError):
+            RealSystem.curl_route_options(interface="-I", proxy_url="socks5h://127.0.0.1:1080")
+        with self.assertRaises(ValueError):
             RealSystem.curl_route_options(proxy_url="socks5h://example.invalid:1080")
+        with self.assertRaises(ValueError):
+            RealSystem.curl_route_options(proxy_url="socks5h://127.0.0.1:0")
+
+    @patch("vpn_monitor.system.subprocess.run")
+    def test_handshake_rejects_option_like_interface_names_without_running_a_command(self, run):
+        self.assertFalse(RealSystem().handshake("-h", binary="wg"))
+        run.assert_not_called()
 
     def test_liveness_probe_bypasses_a_stale_successful_identity_cache(self):
         system = RealSystem()

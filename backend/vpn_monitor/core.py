@@ -284,6 +284,7 @@ class VpnMonitor:
         # binding/proxy and reports the direct network identity instead.
         identity_probe = probe if conn["active"] else {"interface": None, "proxy_url": None}
         identity = self.system.public_identity(**identity_probe)
+        diagnostics = self.diagnostics_for(adapter, conn)
         return {
             "client": {"id": adapter.id, "name": adapter.name, "installed": installed, "processRunning": process_running,
                        "serviceRunning": service_running,
@@ -298,10 +299,10 @@ class VpnMonitor:
             },
             "diagnostics": {
                 "internetAvailable": self.system.internet_available(**probe) if iface else False,
-                "pingMs": self.diagnostics_for(adapter, conn).get("pingMs"), "packetLoss": self.diagnostics_for(adapter, conn).get("packetLoss"),
-                "dns": self.diagnostics_for(adapter, conn).get("dns"), "http": self.diagnostics_for(adapter, conn).get("http"),
-                "viaVpn": self.diagnostics_for(adapter, conn).get("viaVpn"),
-                "interface": self.diagnostics_for(adapter, conn).get("interface"),
+                "pingMs": diagnostics.get("pingMs"), "packetLoss": diagnostics.get("packetLoss"),
+                "dns": diagnostics.get("dns"), "http": diagnostics.get("http"),
+                "viaVpn": diagnostics.get("viaVpn"),
+                "interface": diagnostics.get("interface"),
                 "speedTest": self.speed_tests.current(),
             },
             "traffic": self.traffic.update(iface["name"], int(iface.get("rx", 0)), int(iface.get("tx", 0))) if iface else {"inputBytes": 0, "outputBytes": 0, "downloadMbps": 0.0, "uploadMbps": 0.0},

@@ -26,7 +26,7 @@ class RealSystem:
     # than one polling cycle.
     IDENTITY_CACHE_SECONDS = 2
     SERVICE_CACHE_SECONDS = 5
-    _INTERFACE_NAME = re.compile(r"^[A-Za-z0-9_.:-]{1,15}$")
+    _INTERFACE_NAME = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_.:-]{0,14}$")
     _LOCAL_PROXY_SCHEMES = {"socks5", "socks5h"}
     COUNTRY_NAMES = {
         "AU": "Australia", "AT": "Austria", "BE": "Belgium", "BR": "Brazil",
@@ -110,7 +110,12 @@ class RealSystem:
         return self._run(["ip", "-j", "route", "show", "table", "all"], [])
 
     def handshake(self, interface, binary="wg"):
-        if binary not in {"wg", "awg"} or not self.executable(binary):
+        if (
+            binary not in {"wg", "awg"}
+            or not isinstance(interface, str)
+            or not self._INTERFACE_NAME.fullmatch(interface)
+            or not self.executable(binary)
+        ):
             return False
         result = subprocess.run([binary, "show", interface, "latest-handshakes"], text=True, capture_output=True, timeout=2, check=False)
         if result.returncode:
@@ -119,6 +124,10 @@ class RealSystem:
 
     @classmethod
     def curl_route_options(cls, interface=None, proxy_url=None):
+        if interface not in (None, "") and (
+            not isinstance(interface, str) or not cls._INTERFACE_NAME.fullmatch(interface)
+        ):
+            raise ValueError("Invalid VPN interface name")
         if proxy_url:
             parsed = urlsplit(proxy_url)
             try:
@@ -129,14 +138,13 @@ class RealSystem:
                 parsed.scheme not in cls._LOCAL_PROXY_SCHEMES
                 or parsed.hostname not in {"127.0.0.1", "::1"}
                 or port is None
+                or not 1 <= port <= 65535
                 or parsed.username is not None
                 or parsed.password is not None
             ):
                 raise ValueError("VPN diagnostic proxy must be an unauthenticated local SOCKS proxy")
             return ["--proxy", proxy_url]
         if interface:
-            if not cls._INTERFACE_NAME.fullmatch(interface):
-                raise ValueError("Invalid VPN interface name")
             # `if!` makes curl treat this input as an interface, never as a
             # hostname or source address. This prevents an accidental direct
             # probe when adapter metadata is malformed.
@@ -169,7 +177,7 @@ class RealSystem:
     def _http_probe(self, name, url, interface=None, proxy_url=None):
         started = time.monotonic()
         command = [
-            "curl", "-sS", "--connect-timeout", "2", "--max-time", "4",
+            "curl", "-sS", "--connect-timeout", "2", "--max-time", "4", "--max-filesize", "32768",
             *self.curl_route_options(interface, proxy_url),
             "-o", "-", "-w", "\n__VPN_MONITOR__%{http_code} %{time_total}", url,
         ]
@@ -207,6 +215,10 @@ class RealSystem:
     def connectivity(self, interface=None, proxy_url=None):
         """Bounded read-only diagnostic; a failed probe is data, not an error."""
         import re
+        if interface not in (None, "") and (
+            not isinstance(interface, str) or not self._INTERFACE_NAME.fullmatch(interface)
+        ):
+            raise ValueError("Invalid VPN interface name")
         started = time.monotonic()
         targets = [self._http_probe(name, url, interface, proxy_url) for name, url in self.HTTP_TARGETS]
         cloudflare = targets[0]

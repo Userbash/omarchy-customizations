@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/install-common.sh"
+initialize_customizations_paths
 
 if [[ "${OMARCHY_CUSTOMIZATIONS_SKIP_CHECK:-0}" != 1 ]]; then "$root/scripts/check.sh"; fi
 for command_name in systemctl omarchy hyprctl install; do assert_command "$command_name"; done
-mapfile -t paths < <(managed_paths "$root" | awk 'NF && !seen[$0]++')
+managed_path_output=$(managed_paths "$root")
+mapfile -t paths < <(printf '%s\n' "$managed_path_output" | awk 'NF && !seen[$0]++')
 backup=$(new_backup_dir install)
 snapshot_paths "$backup" "${paths[@]}"
 capture_service_state "$backup/services" omarchy-vpn-monitor.service
@@ -51,8 +54,11 @@ systemctl --user enable --now llama-game-guard.service
 omarchy restart shell
 hyprctl reload
 
-mkdir -p "$customizations_state"
-printf '%s\n' "$backup" > "$customizations_state/last-install-backup"
+ensure_safe_absolute_directory_path "$customizations_state"
+state_record="$customizations_state/last-install-backup"
+assert_safe_absolute_file_path "$state_record"
+printf '%s\n' "$backup" > "$state_record"
+chmod 600 -- "$state_record"
 trap - ERR
 rollback_required=0
 printf 'Installed successfully. Backup: %s\n' "$backup"

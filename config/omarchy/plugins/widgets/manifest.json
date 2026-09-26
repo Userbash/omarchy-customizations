@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "widgets",
-  "name": "Sanya glass widgets",
+  "name": "Sanya desktop dashboard",
   "version": "1.0.0",
   "author": "sanya",
-  "description": "Transparent right-side system, weather, network and music cards.",
+  "description": "Matte right-side dashboard for weather, system metrics and media with movable tiles and light/dark themes.",
   "kinds": ["service"],
   "keepLoaded": true,
   "entryPoints": { "service": "Main.qml" }

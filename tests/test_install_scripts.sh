@@ -77,4 +77,39 @@ backup_after_failure=$(<"$home/.local/share/omarchy-customizations/last-install-
 [[ -d "$backup_after_failure" ]]
 OMARCHY_CUSTOMIZATIONS_SKIP_CHECK=1 bash "$root/scripts/uninstall.sh" > "$tmp/final-uninstall.out"
 assert_original_state
+
+# A symlinked parent used to make managed-path removals escape the home.
+unsafe_home="$tmp/unsafe-home"
+outside="$tmp/outside"
+mkdir -p "$unsafe_home" "$outside/hypr"
+printf 'must-survive\n' > "$outside/hypr/hyprland.lua"
+ln -s "$outside" "$unsafe_home/.config"
+if CUSTOMIZATIONS_HOME="$unsafe_home" \
+   CUSTOMIZATIONS_STATE="$unsafe_home/.local/share/omarchy-customizations" \
+   HOME="$unsafe_home" OMARCHY_CUSTOMIZATIONS_SKIP_CHECK=1 \
+   bash "$root/scripts/install.sh" > "$tmp/symlink-install.out" 2>&1; then
+  echo 'install unexpectedly accepted a symlinked managed-path parent' >&2
+  exit 1
+fi
+[[ $(<"$outside/hypr/hyprland.lua") == must-survive ]]
+[[ ! -e "$outside/omarchy/backups" ]]
+
+# A modified backup manifest must fail validation before any restore removes
+# data outside the managed set.
+manifest_home="$tmp/manifest-home"
+manifest_backup="$manifest_home/.config/omarchy/backups/omarchy-customizations-install-malicious"
+mkdir -p "$manifest_backup/data" "$manifest_home/.local/share/omarchy-customizations"
+printf '.config/omarchy/plugins/../../../../outside-sentinel\n' > "$manifest_backup/paths"
+: > "$manifest_backup/missing"
+: > "$manifest_backup/services"
+printf '%s\n' "$manifest_backup" > "$manifest_home/.local/share/omarchy-customizations/last-install-backup"
+printf 'must-survive\n' > "$tmp/outside-sentinel"
+if PATH="$fakebin:$PATH" CUSTOMIZATIONS_HOME="$manifest_home" \
+   CUSTOMIZATIONS_STATE="$manifest_home/.local/share/omarchy-customizations" \
+   HOME="$manifest_home" bash "$root/scripts/uninstall.sh" > "$tmp/malicious-uninstall.out" 2>&1; then
+  echo 'uninstall unexpectedly accepted a traversal path in its backup manifest' >&2
+  exit 1
+fi
+[[ $(<"$tmp/outside-sentinel") == must-survive ]]
+
 printf 'install/uninstall isolated tests: ok\n'

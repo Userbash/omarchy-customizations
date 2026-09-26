@@ -10,16 +10,12 @@ function actionFor(key, modifiers) {
     if (mods.shift && !mods.ctrl && !mods.alt) return "copy"
     if (!mods.shift && !mods.alt) return "paste"
   }
-  if (normalized === "S" && mods.ctrl && !mods.alt && !mods.shift) return "saveAs"
-  if (normalized === "P" && mods.ctrl && !mods.alt && !mods.shift) return "pin"
   if (normalized === "Delete" && mods.ctrl && !mods.alt && !mods.shift) return "clearAll"
   return ""
 }
 
 function labels() {
   return {
-    saveAs: "Save (Ctrl+S)",
-    pin: "Pin (Ctrl+P)",
     clearAll: "Очистить (Ctrl+Del)"
   }
 }

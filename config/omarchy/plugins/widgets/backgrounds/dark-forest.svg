@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="740" viewBox="0 0 480 740">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#142946"/>
+      <stop offset=".5" stop-color="#296a75"/>
+      <stop offset="1" stop-color="#9dbca7"/>
+    </linearGradient>
+    <radialGradient id="moon"><stop stop-color="#f7f1d8"/><stop offset="1" stop-color="#b4e5d5" stop-opacity="0"/></radialGradient>
+    <linearGradient id="water" x2="0" y2="1"><stop stop-color="#5c9992"/><stop offset="1" stop-color="#1c4051"/></linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="23"/></filter>
+    <clipPath id="panel"><rect width="480" height="740" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#panel)">
+  <rect width="480" height="740" fill="url(#sky)"/>
+  <ellipse cx="327" cy="181" rx="123" ry="119" fill="#9ce2d6" opacity=".32" filter="url(#blur)"/>
+  <circle cx="327" cy="179" r="54" fill="url(#moon)"/>
+  <circle cx="327" cy="179" r="31" fill="#e8f0dc" opacity=".82"/>
+  <path d="M0 343 Q90 293 175 336 T338 316 T480 337 V516 H0Z" fill="#416d70" opacity=".72"/>
+  <path d="M0 399 L49 327 99 398 143 304 202 405 251 323 302 403 354 304 411 400 455 329 480 371 V553 H0Z" fill="#234e57" opacity=".89"/>
+  <path d="M0 513 Q107 489 222 516 T480 500 V740 H0Z" fill="url(#water)" opacity=".88"/>
+  <path d="M275 521 Q330 506 371 519 L439 740 H205Z" fill="#bce8ca" opacity=".19"/>
+  <path d="M0 564 Q102 544 204 565 T480 555 M0 632 Q132 613 251 634 T480 622 M0 699 Q108 685 212 702 T480 687" fill="none" stroke="#d5ecd5" stroke-width="3" opacity=".38"/>
+  <g fill="#d7edb6" opacity=".9">
+    <circle cx="88" cy="246" r="3"/><circle cx="142" cy="274" r="2"/><circle cx="214" cy="225" r="2.4"/>
+    <circle cx="397" cy="262" r="3"/><circle cx="432" cy="315" r="2"/><circle cx="61" cy="364" r="2.5"/>
+    <circle cx="180" cy="377" r="1.8"/><circle cx="355" cy="358" r="2"/>
+  </g>
+  <g fill="#b8ddc6" opacity=".36">
+    <path d="M23 502l27-93 26 93z"/><path d="M75 507l35-121 34 121z"/><path d="M384 504l31-114 31 114z"/><path d="M429 508l24-86 27 86z"/>
+  </g>
+  </g>
+</svg>

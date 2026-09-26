@@ -1,4 +1,4 @@
--- Apple Liquid Glass only for the user's widget surface.
+-- Subtle wallpaper blur behind the desktop dashboard's translucent surface.
 hl.config({
   decoration = {
     blur = {
@@ -13,8 +13,8 @@ hl.config({
 })
 
 hl.layer_rule({
-  name = "omarchy-custom-widgets-liquid-glass",
-  match = { namespace = "^omarchy-custom-widgets$" },
+  name = "sanya-widgets-dashboard",
+  match = { namespace = "^sanya-widgets$" },
   blur = true,
   ignore_alpha = 0.10,
 })

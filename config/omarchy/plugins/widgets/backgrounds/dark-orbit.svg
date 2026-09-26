@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="740" viewBox="0 0 480 740">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#17204a"/>
+      <stop offset=".42" stop-color="#45416f"/>
+      <stop offset=".72" stop-color="#806887"/>
+      <stop offset="1" stop-color="#334c68"/>
+    </linearGradient>
+    <linearGradient id="lake" x2="0" y2="1">
+      <stop stop-color="#5e8297"/>
+      <stop offset="1" stop-color="#192c49"/>
+    </linearGradient>
+    <radialGradient id="planet">
+      <stop stop-color="#fff0d6"/>
+      <stop offset=".72" stop-color="#ffc4d0"/>
+      <stop offset="1" stop-color="#dc91bd" stop-opacity=".1"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="22"/></filter>
+    <clipPath id="panel"><rect width="480" height="740" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#panel)">
+  <rect width="480" height="740" fill="url(#sky)"/>
+  <ellipse cx="338" cy="211" rx="157" ry="126" fill="#f08cbb" opacity=".31" filter="url(#glow)"/>
+  <circle cx="338" cy="208" r="67" fill="url(#planet)" opacity=".9"/>
+  <ellipse cx="340" cy="211" rx="122" ry="21" fill="none" stroke="#f4d9e8" stroke-width="4" opacity=".43" transform="rotate(-18 340 211)"/>
+  <g fill="#f8e7ff" opacity=".88">
+    <circle cx="37" cy="77" r="2.2"/><circle cx="93" cy="143" r="1.5"/><circle cx="157" cy="82" r="2"/>
+    <circle cx="215" cy="175" r="1.5"/><circle cx="427" cy="84" r="2"/><circle cx="76" cy="253" r="1.7"/>
+    <circle cx="183" cy="233" r="2.1"/><circle cx="450" cy="285" r="1.7"/><circle cx="275" cy="101" r="1.4"/>
+  </g>
+  <path d="M0 402 Q71 342 134 380 T263 361 T480 376 V532 H0Z" fill="#4b567a" opacity=".83"/>
+  <path d="M0 465 L75 396 130 450 217 352 289 455 365 389 480 460 V570 H0Z" fill="#293d62"/>
+  <path d="M0 500 L77 426 130 468 217 374 286 477 365 411 480 485 V585 H0Z" fill="#9bb3c0" opacity=".43"/>
+  <path d="M0 529 Q128 504 245 530 T480 519 V740 H0Z" fill="url(#lake)" opacity=".86"/>
+  <path d="M307 534 Q350 523 382 537 L440 740 H247Z" fill="#f6b7ce" opacity=".22"/>
+  <path d="M0 581 Q106 564 217 583 T480 574 M0 643 Q113 627 237 646 T480 633 M0 704 Q104 692 205 706 T480 695" fill="none" stroke="#a9d5df" stroke-width="3" opacity=".38"/>
+  <g fill="#ffcfe3" opacity=".8">
+    <circle cx="107" cy="319" r="3"/><circle cx="151" cy="293" r="2"/><circle cx="278" cy="321" r="2.5"/>
+    <circle cx="405" cy="342" r="2"/><circle cx="52" cy="365" r="2"/>
+  </g>
+  </g>
+</svg>

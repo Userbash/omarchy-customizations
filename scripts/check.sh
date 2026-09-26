@@ -14,7 +14,11 @@ python3 -m unittest "$root/tests/test_game_guard.py" && pass 'game guard unit te
 for unit in "$root"/config/systemd/user/*.service; do systemd-analyze verify "$unit" && pass "$unit" || fail "$unit"; done
 PYTHONPATH="$root/backend" python3 -m unittest discover -s "$root/tests" -q && pass 'backend unit tests' || fail 'backend unit tests'
 node "$root/tests/test_notifications_logic.js" && pass 'notification logic tests' || fail 'notification logic tests'
+node "$root/tests/test_weather_model.js" && pass 'weather model validation tests' || fail 'weather model validation tests'
+node "$root/tests/test_widget_layout.js" && pass 'widget tile layout tests' || fail 'widget tile layout tests'
 bash "$root/tests/test_install_scripts.sh" && pass 'isolated install/uninstall tests' || fail 'isolated install/uninstall tests'
+bash "$root/tests/test_kvm_metrics.sh" && pass 'KVM metrics JSON test' || fail 'KVM metrics JSON test'
+bash "$root/tests/test_player_control.sh" && pass 'player control argv test' || fail 'player control argv test'
 for test in "$root"/config/omarchy/plugins/clipboard.local/tests/test_clipboard.sh "$root"/config/omarchy/plugins/music-desktop/tests/test_music_desktop.sh; do bash "$test" && pass "$test" || fail "$test"; done
 bash "$root/tests/test_game_guard_e2e.sh" && pass 'game guard e2e' || fail 'game guard e2e'
 bash "$root/config/omarchy/plugins/music-desktop/tests/test_regressions.sh" && pass 'music regression tests' || fail 'music regression tests'

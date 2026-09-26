@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/install-common.sh"
+initialize_customizations_paths
 for command_name in systemctl omarchy hyprctl; do assert_command "$command_name"; done
 
 state_backup="$customizations_state/last-install-backup"
+assert_safe_absolute_directory_path "$customizations_state"
+assert_safe_absolute_file_path "$state_backup"
 if [[ ! -f "$state_backup" ]]; then
   echo "No install backup record found at $state_backup; refusing to remove files without a restore point." >&2
   exit 1
 fi
-install_backup=$(<"$state_backup")
-if [[ ! -d "$install_backup" || ! -f "$install_backup/paths" || ! -f "$install_backup/missing" || ! -f "$install_backup/services" ]]; then
+mapfile -t backup_records < "$state_backup"
+if ((${#backup_records[@]} != 1)) || [[ -z "${backup_records[0]:-}" ]]; then
+  echo "Recorded install backup path is invalid: $state_backup" >&2
+  exit 1
+fi
+install_backup=${backup_records[0]}
+if ! validate_backup_directory "$install_backup" || ! validate_snapshot_manifest "$install_backup" || \
+   [[ ! -f "$install_backup/services" || -L "$install_backup/services" ]]; then
   echo "Recorded install backup is missing or incomplete: $install_backup" >&2
   exit 1
 fi
@@ -50,7 +60,12 @@ systemctl --user daemon-reload
 omarchy restart shell
 hyprctl reload
 
-printf '%s\n' "$backup" > "$customizations_state/last-uninstall-backup"
+ensure_safe_absolute_directory_path "$customizations_state"
+state_record="$customizations_state/last-uninstall-backup"
+assert_safe_absolute_file_path "$state_record"
+printf '%s\n' "$backup" > "$state_record"
+chmod 600 -- "$state_record"
+assert_safe_absolute_file_path "$state_backup"
 rm -f -- "$state_backup"
 trap - ERR
 rollback_required=0
