@@ -65,6 +65,7 @@ Item {
   property int volumeReadRevision: 0
   property bool seeking: false
   property bool editing: false
+  property bool draggingItems: false
   property string editorTab: "layout"
   property bool sectionCreateOpen: false
   property string sectionDraftTitle: ""
@@ -345,8 +346,9 @@ Item {
 
   function tileHeight(tileId, isEditing) {
     var size = tileSize(tileId)
+    if (isEditing) return 94 * size.rows + Math.max(0, size.rows - 1) * 8
     var base = tileId === "weather" ? 140 : tileId === "player" ? 210 : 88
-    return base * size.rows + Math.max(0, size.rows - 1) * 10 + (isEditing ? 32 : 0)
+    return base * size.rows + Math.max(0, size.rows - 1) * 10
   }
 
   function commitLayout(next) {
@@ -497,6 +499,10 @@ Item {
     commitLayout(TileLayout.move(widgetLayout, tileId, targetSectionId, targetTileId, after))
   }
 
+  function setLayoutLocked(locked) {
+    commitLayout(TileLayout.setLocked(widgetLayout, locked))
+  }
+
   function availableTileIds() {
     return TileLayout.availableTiles(widgetLayout)
   }
@@ -536,6 +542,10 @@ Item {
     if (index < 0 || targetIndex < 0 || targetIndex >= widgetLayout.sections.length) return
     var targetId = widgetLayout.sections[targetIndex].id
     commitLayout(TileLayout.moveSection(widgetLayout, sectionId, targetId, offset > 0))
+  }
+
+  function moveSectionTo(sectionId, targetSectionId, after) {
+    commitLayout(TileLayout.moveSection(widgetLayout, sectionId, targetSectionId, after))
   }
 
   function resizeTile(tileId, columnDelta, rowDelta) {
@@ -774,6 +784,8 @@ Item {
         clip: true
         contentWidth: width
         contentHeight: contentColumn.implicitHeight
+        interactive: !root.editing
+          || (contentColumn.implicitHeight > viewport.height && !root.draggingItems)
         boundsBehavior: Flickable.StopAtBounds
 
         ColumnLayout {
@@ -989,35 +1001,44 @@ Item {
               }
             }
 
-            Flow {
+            GridLayout {
               Layout.fillWidth: true
               Layout.preferredWidth: width
-              Layout.preferredHeight: 29
-              spacing: 6
+              Layout.preferredHeight: 64
+              columns: 2
+              rowSpacing: 6
+              columnSpacing: 6
 
               Repeater {
                 model: [
-                  { id: "sizes", label: "Размеры по умолчанию", width: 151 },
-                  { id: "reset", label: "Сбросить всё", width: 99 },
-                  { id: "section", label: "+ Новый блок", width: 104 }
+                  { id: "lock", label: root.widgetLayout.locked ? "Разблокировать" : "Заблокировать" },
+                  { id: "sizes", label: "Размеры по умолчанию" },
+                  { id: "reset", label: "Сбросить раскладку" },
+                  { id: "section", label: "+ Новый блок" }
                 ]
 
                 delegate: Rectangle {
                   required property var modelData
-                  width: modelData.width
+                  Layout.fillWidth: true
+                  Layout.preferredHeight: 29
                   height: 29
                   radius: 10
-                  color: actionMouse.containsMouse ? root.accentHover : root.raisedSurface
+                  color: modelData.id === "lock" && root.widgetLayout.locked
+                    ? root.accentSurface : actionMouse.containsMouse ? root.accentHover : root.raisedSurface
                   border.width: 1
-                  border.color: root.surfaceBorder
+                  border.color: modelData.id === "lock" && root.widgetLayout.locked
+                    ? root.accentColor : root.surfaceBorder
 
                   Text {
                     anchors.centerIn: parent
                     text: modelData.label
-                    color: root.primaryText
+                    color: modelData.id === "lock" && root.widgetLayout.locked
+                      ? root.accentColor : root.primaryText
                     font.family: root.uiFont
-                    font.pixelSize: 9
+                    font.pixelSize: 10
                     font.bold: true
+                    elide: Text.ElideRight
+                    width: parent.width - 10
                   }
 
                   MouseArea {
@@ -1026,8 +1047,13 @@ Item {
                     acceptedButtons: Qt.LeftButton
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.id === "lock"
+                      ? (root.widgetLayout.locked ? "Разблокировать перемещения" : "Заблокировать перемещения")
+                      : modelData.label
                     onClicked: {
-                      if (modelData.id === "sizes") root.resetSizes()
+                      if (modelData.id === "lock") root.setLayoutLocked(!root.widgetLayout.locked)
+                      else if (modelData.id === "sizes") root.resetSizes()
                       else if (modelData.id === "reset") root.resetLayout()
                       else root.addSection("Новый блок")
                     }
@@ -1037,7 +1063,7 @@ Item {
             }
 
             Text {
-              text: "Перетаскивайте плитки или меняйте порядок блоков стрелками. Внизу карточки доступны размер и удаление."
+              text: "Тяните блоки за ручку, плитки — за карточку. Замок блокирует перемещение; двойной щелчок сбрасывает размер."
               color: root.secondaryText
               font.family: root.uiFont
               font.pixelSize: 9
@@ -1239,7 +1265,12 @@ Item {
             }
           }
 
-          Text {
+          ColumnLayout {
+            visible: !root.editing || root.editorTab === "layout"
+            Layout.fillWidth: true
+            spacing: 10
+
+            Text {
             visible: root.editing && root.editorTab === "layout"
             Layout.fillWidth: true
             Layout.preferredHeight: 15
@@ -1249,20 +1280,22 @@ Item {
             font.pixelSize: 9
             font.bold: true
             font.letterSpacing: 0.7
-          }
+            }
 
-          Repeater {
-            model: root.widgetLayout.sections
+            Repeater {
+              model: root.widgetLayout.sections
 
-            delegate: WidgetSection {
-              required property var modelData
-              sectionId: modelData.id
-              title: modelData.title
-              tileIds: modelData.tiles
-              availableTiles: root.availableTileIds()
-              dashboard: root
-              editing: root.editing && root.editorTab === "layout"
-              Layout.fillWidth: true
+              delegate: WidgetSection {
+                required property var modelData
+                sectionId: modelData.id
+                title: modelData.title
+                tileIds: modelData.tiles
+                availableTiles: root.availableTileIds()
+                dashboard: root
+                dragLayer: dragOverlay
+                editing: root.editing && root.editorTab === "layout"
+                Layout.fillWidth: true
+              }
             }
           }
         }
@@ -1276,8 +1309,19 @@ Item {
           * (viewport.height - height)
         radius: 2
         color: root.accentColor
-        opacity: 0.72
         visible: viewport.contentHeight > viewport.height
+        opacity: root.editing ? 0.55 : 0.72
+      }
+
+      Item {
+        id: dragOverlay
+        x: viewport.x
+        y: viewport.y
+        width: viewport.width
+        height: viewport.height
+        z: 50
+        clip: false
+        visible: root.editing
       }
     }
   }

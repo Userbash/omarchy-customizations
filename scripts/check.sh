@@ -16,6 +16,12 @@ PYTHONPATH="$root/backend" python3 -m unittest discover -s "$root/tests" -q && p
 node "$root/tests/test_notifications_logic.js" && pass 'notification logic tests' || fail 'notification logic tests'
 node "$root/tests/test_weather_model.js" && pass 'weather model validation tests' || fail 'weather model validation tests'
 node "$root/tests/test_widget_layout.js" && pass 'widget tile layout tests' || fail 'widget tile layout tests'
+node "$root/tests/test_widget_qml_contract.js" && pass 'widget QML interaction wiring tests' || fail 'widget QML interaction wiring tests'
+if command -v quickshell >/dev/null && command -v jq >/dev/null; then
+  bash "$root/tests/test_widgets_qml_e2e.sh" && pass 'widget QML IPC end-to-end tests' || fail 'widget QML IPC end-to-end tests'
+else
+  printf 'SKIP — widget QML IPC end-to-end checks require quickshell and jq\n'
+fi
 bash "$root/tests/test_install_scripts.sh" && pass 'isolated install/uninstall tests' || fail 'isolated install/uninstall tests'
 bash "$root/tests/test_kvm_metrics.sh" && pass 'KVM metrics JSON test' || fail 'KVM metrics JSON test'
 bash "$root/tests/test_player_control.sh" && pass 'player control argv test' || fail 'player control argv test'

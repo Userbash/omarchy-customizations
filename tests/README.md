@@ -10,7 +10,8 @@ bash scripts/check.sh
 
 The runner validates JSON and shell syntax, Python compilation, systemd units,
 backend and plugin logic, isolated install/uninstall behavior, clipboard
-capture, player arguments, KVM JSON output, and the game-guard fixture. The
+capture, player arguments, KVM JSON output, the game-guard fixture, and the
+widget's QML/IPC end-to-end scenario when Quickshell and `jq` are installed. The
 backend suite includes read-only probes against the current machine; it does
 not start or stop VPNs. Optional tools such as `qmllint`, `qmltestrunner`,
 `wtype`, and `shellcheck` are reported as skipped when unavailable.
@@ -29,7 +30,15 @@ Notification and weather logic:
 node tests/test_notifications_logic.js
 node tests/test_weather_model.js
 node tests/test_widget_layout.js
+node tests/test_widget_qml_contract.js
+bash tests/test_widgets_qml_e2e.sh
 ```
+
+The widget end-to-end test creates a temporary Quickshell configuration, state
+directory, and fake MPRIS player. It covers section and tile moves, the layout
+lock, resizing and reset, appearance settings, weather line parsing, playback,
+seeking, volume readback, mute, and queued writes without changing the desktop
+player.
 
 Install scripts, KVM output, player control, and the game-guard fixture:
 

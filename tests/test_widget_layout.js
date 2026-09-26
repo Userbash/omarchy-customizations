@@ -11,7 +11,8 @@ function tileIds(layout, id) {
 }
 
 const defaults = TileLayout.defaultLayout()
-assert.equal(defaults.version, 2)
+assert.equal(defaults.version, 3)
+assert.equal(defaults.locked, false)
 assert.equal(defaults.theme, "auto")
 assert.deepEqual(defaults.sections.map((entry) => entry.id), ["weather", "system", "media"])
 assert.deepEqual(tileIds(defaults, "weather"), ["weather"])
@@ -30,16 +31,29 @@ const migrated = TileLayout.normalize({
     media: []
   }
 })
-assert.equal(migrated.version, 2)
+assert.equal(migrated.version, 3)
 assert.equal(migrated.theme, "dark")
 assert.deepEqual(tileIds(migrated, "weather"), ["cpu", "weather"])
-assert.deepEqual(tileIds(migrated, "system"), ["player", "gpu", "temperature", "network"])
-assert.deepEqual(tileIds(migrated, "media"), [])
+assert.deepEqual(tileIds(migrated, "system"), ["gpu", "temperature", "network"])
+assert.deepEqual(tileIds(migrated, "media"), ["player"])
 assert.deepEqual(TileLayout.normalize({ version: 99 }), defaults)
 assert.deepEqual(TileLayout.normalize("broken"), defaults)
 
 const roundTrip = TileLayout.normalize(JSON.parse(JSON.stringify(defaults)))
 assert.deepEqual(roundTrip, defaults)
+
+const migratedV2 = TileLayout.normalize({
+  ...defaults,
+  version: 2,
+  sections: [
+    { id: "system", title: "Система", tiles: ["player", "cpu", "gpu", "temperature", "network"] },
+    { id: "weather", title: "Погода", tiles: ["weather"] }
+  ]
+})
+assert.equal(migratedV2.version, 3)
+assert.deepEqual(migratedV2.sections.map((entry) => entry.id), ["system", "weather", "media"])
+assert.deepEqual(tileIds(migratedV2, "system"), ["cpu", "gpu", "temperature", "network"])
+assert.deepEqual(tileIds(migratedV2, "media"), ["player"])
 
 const reordered = TileLayout.move(defaults, "network", "system", "cpu", false)
 assert.deepEqual(tileIds(reordered, "system"), ["network", "cpu", "gpu", "temperature"])
@@ -49,8 +63,10 @@ assert.deepEqual(tileIds(movedAcross, "weather"), [])
 assert.deepEqual(tileIds(movedAcross, "system"), ["cpu", "gpu", "weather", "temperature", "network"])
 
 const movedToEmpty = TileLayout.move(defaults, "player", "weather", "", true)
-assert.deepEqual(tileIds(movedToEmpty, "media"), [])
-assert.deepEqual(tileIds(movedToEmpty, "weather"), ["weather", "player"])
+assert.deepEqual(movedToEmpty, defaults)
+assert.deepEqual(TileLayout.move(defaults, "player", "system", "cpu", false), defaults)
+assert.deepEqual(TileLayout.removeTile(defaults, "player"), defaults)
+assert.deepEqual(TileLayout.addTile(defaults, "player", "weather"), defaults)
 
 const movedWithin = TileLayout.move(defaults, "cpu", "system", "network", true)
 assert.deepEqual(tileIds(movedWithin, "system"), ["gpu", "temperature", "network", "cpu"])
@@ -62,21 +78,32 @@ assert.deepEqual(TileLayout.move(defaults, "cpu", "system", "missing", false), d
 const sectionAdded = TileLayout.addSection(defaults, "Кабинет")
 assert.ok(section(sectionAdded, "section-1"))
 assert.equal(section(sectionAdded, "section-1").title, "Кабинет")
+let maximumSections = defaults
+for (let index = 0; index < TileLayout.MAX_SECTIONS; index += 1) {
+  maximumSections = TileLayout.addSection(maximumSections, "Дополнительный блок")
+}
+assert.equal(maximumSections.sections.length, TileLayout.MAX_SECTIONS)
+assert.deepEqual(TileLayout.addSection(maximumSections, "Лишний блок"), maximumSections)
+assert.deepEqual(tileIds(maximumSections, "media"), ["player"])
 const renamed = TileLayout.renameSection(sectionAdded, "section-1", "  Рабочая зона  ")
 assert.equal(section(renamed, "section-1").title, "Рабочая зона")
 const sectionMoved = TileLayout.moveSection(renamed, "section-1", "weather", false)
 assert.deepEqual(sectionMoved.sections.map((entry) => entry.id), ["section-1", "weather", "system", "media"])
+const mediaMoved = TileLayout.moveSection(defaults, "media", "weather", false)
+assert.deepEqual(mediaMoved.sections.map((entry) => entry.id), ["media", "weather", "system"])
+assert.deepEqual(tileIds(mediaMoved, "media"), ["player"])
 
 const mediaSectionRemoved = TileLayout.removeSection(defaults, "media")
-assert.equal(section(mediaSectionRemoved, "media"), undefined)
-assert.deepEqual(TileLayout.availableTiles(mediaSectionRemoved), ["player"])
-const playerAdded = TileLayout.addTile(mediaSectionRemoved, "player", "system")
-assert.deepEqual(tileIds(playerAdded, "system").slice(-1), ["player"])
-assert.deepEqual(TileLayout.availableTiles(playerAdded), [])
-assert.deepEqual(TileLayout.addTile(playerAdded, "player", "weather"), playerAdded)
-const playerRemoved = TileLayout.removeTile(playerAdded, "player")
-assert.deepEqual(TileLayout.availableTiles(playerRemoved), ["player"])
-assert.deepEqual(TileLayout.removeSection(playerRemoved, "system").sections.map((entry) => entry.id), ["weather"])
+assert.deepEqual(mediaSectionRemoved, defaults)
+assert.deepEqual(TileLayout.availableTiles(mediaSectionRemoved), [])
+assert.deepEqual(TileLayout.removeSection(defaults, "system").sections.map((entry) => entry.id), ["weather", "media"])
+
+const lockedLayout = TileLayout.setLocked(defaults, true)
+assert.equal(lockedLayout.locked, true)
+assert.equal(TileLayout.normalize(JSON.parse(JSON.stringify(lockedLayout))).locked, true)
+assert.deepEqual(TileLayout.move(lockedLayout, "cpu", "system", "network", true), lockedLayout)
+assert.deepEqual(TileLayout.moveSection(lockedLayout, "media", "weather", false), lockedLayout)
+assert.deepEqual(TileLayout.setLocked(lockedLayout, false), defaults)
 
 const resizedCpu = TileLayout.resizeTile(defaults, "cpu", 2, 2)
 assert.deepEqual(resizedCpu.tileSizes.cpu, { columns: 2, rows: 2 })
@@ -117,4 +144,4 @@ assert.equal(clamped.appearance.weatherIconSet, "color")
 const reset = TileLayout.resetLayout()
 assert.deepEqual(reset, defaults)
 
-console.log("widget layout v2 tests passed")
+console.log("widget layout v3 tests passed")

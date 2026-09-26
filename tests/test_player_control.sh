@@ -22,15 +22,20 @@ case ${1:-} in
     printf 'Playing§Test Artist§Test Title§Test Album§180000000§3960000000\n'
     ;;
   volume)
-    printf '%s\n' "${PLAYERCTL_VOLUME:-0.65}"
+    if [[ $# == 1 ]]; then
+      cat "$PLAYERCTL_VOLUME_FILE"
+    else
+      printf '%s\n' "$2" > "$PLAYERCTL_VOLUME_FILE"
+    fi
     ;;
 esac
 SH
 chmod +x "$tmp/bin/playerctl"
+printf '0.65\n' > "$tmp/volume"
 
 control="$root/config/omarchy/plugins/widgets/player-control.sh"
 run_control() {
-  PATH="$tmp/bin:$PATH" PLAYER_CONTROL_LOG="$tmp/calls.log" PLAYERCTL_VOLUME=0.65 sh "$control" "$@"
+  PATH="$tmp/bin:$PATH" PLAYER_CONTROL_LOG="$tmp/calls.log" PLAYERCTL_VOLUME_FILE="$tmp/volume" sh "$control" "$@"
 }
 : >"$tmp/calls.log"
 run_control metadata
@@ -47,10 +52,13 @@ run_control position 42.500 brave.instance48554
 : >"$tmp/calls.log"
 run_control volume-set 0.35 brave.instance48554
 [[ $(<"$tmp/calls.log") == '--player=brave.instance48554 volume 0.35' ]]
+volume=$(run_control volume-get brave.instance48554)
+[[ "$volume" == 'brave.instance48554§0.350' ]]
+[[ $(<"$tmp/volume") == '0.35' ]]
 
 : >"$tmp/calls.log"
 volume=$(run_control volume-get brave.instance48554)
-[[ "$volume" == 'brave.instance48554§0.650' ]]
+[[ "$volume" == 'brave.instance48554§0.350' ]]
 [[ $(<"$tmp/calls.log") == '--player=brave.instance48554 volume' ]]
 
 malicious_position="1; touch $tmp/injected"

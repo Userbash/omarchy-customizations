@@ -1,11 +1,11 @@
-var VERSION = 2
+var VERSION = 3
 var SECTION_IDS = ["weather", "system", "media"]
 var TILE_IDS = ["weather", "cpu", "gpu", "temperature", "network", "player"]
 var THEME_IDS = ["auto", "light", "dark"]
 var WEATHER_ICON_SETS = ["minimal", "color"]
 var LIGHT_WALLPAPERS = ["light-sakura", "light-evening"]
 var DARK_WALLPAPERS = ["dark-orbit", "dark-forest"]
-var MAX_SECTIONS = 12
+var MAX_SECTIONS = 13
 
 var DEFAULT_SECTIONS = [
   { id: "weather", title: "Погода", tiles: ["weather"] },
@@ -76,6 +76,7 @@ function defaultLayout() {
   return {
     version: VERSION,
     theme: "auto",
+    locked: false,
     sections: cloneSections(DEFAULT_SECTIONS),
     tileSizes: sizes,
     appearance: defaultAppearance()
@@ -164,17 +165,38 @@ function normalizeV1(raw) {
     }
   }
 
-  return normalized
+  return ensureMediaPlayer(normalized)
+}
+
+function ensureMediaPlayer(layout) {
+  var mediaIndex = findSection(layout, "media")
+  if (mediaIndex === -1) {
+    if (layout.sections.length >= MAX_SECTIONS) layout.sections.pop()
+    layout.sections.push({ id: "media", title: defaultTitle("media"), tiles: [] })
+    mediaIndex = layout.sections.length - 1
+  }
+
+  for (var sectionIndex = 0; sectionIndex < layout.sections.length; sectionIndex += 1) {
+    var tiles = layout.sections[sectionIndex].tiles
+    for (var tileIndex = tiles.length - 1; tileIndex >= 0; tileIndex -= 1) {
+      if (tiles[tileIndex] === "player" && sectionIndex !== mediaIndex) tiles.splice(tileIndex, 1)
+    }
+  }
+
+  var mediaTiles = layout.sections[mediaIndex].tiles
+  if (mediaTiles.indexOf("player") === -1) mediaTiles.push("player")
+  return layout
 }
 
 function normalize(raw) {
   var fallback = defaultLayout()
   if (!isObject(raw)) return fallback
   if (raw.version === 1) return normalizeV1(raw)
-  if (raw.version !== VERSION) return fallback
+  if (raw.version !== 2 && raw.version !== VERSION) return fallback
 
   var normalized = defaultLayout()
   normalized.theme = hasValue(THEME_IDS, raw.theme) ? raw.theme : "auto"
+  normalized.locked = raw.locked === true
   normalized.sections = []
   normalized.appearance = normalizeAppearance(raw.appearance)
 
@@ -203,6 +225,7 @@ function normalize(raw) {
     for (var tileIndex = 0; tileIndex < incomingTiles.length; tileIndex += 1) {
       var tileId = incomingTiles[tileIndex]
       if (!hasValue(TILE_IDS, tileId) || seenTiles[tileId]) continue
+      if (tileId === "player" && sectionId !== "media") continue
       section.tiles.push(tileId)
       seenTiles[tileId] = true
     }
@@ -216,7 +239,7 @@ function normalize(raw) {
     normalized.tileSizes[sizedTileId] = normalizeSize(sizedTileId, sourceSizes[sizedTileId])
   }
 
-  return normalized
+  return ensureMediaPlayer(normalized)
 }
 
 function findSection(layout, sectionId) {
@@ -236,7 +259,9 @@ function findTile(layout, tileId) {
 
 function move(layout, tileId, targetSectionId, targetTileId, after) {
   var next = normalize(layout)
+  if (next.locked) return next
   if (!hasValue(TILE_IDS, tileId) || findSection(next, targetSectionId) === -1) return next
+  if (tileId === "player" && targetSectionId !== "media") return next
   if (targetTileId && (!hasValue(TILE_IDS, targetTileId) || targetTileId === tileId)) return next
 
   var source = findTile(next, tileId)
@@ -270,6 +295,7 @@ function availableTiles(layout) {
 function addTile(layout, tileId, sectionId) {
   var next = normalize(layout)
   if (!hasValue(TILE_IDS, tileId) || findSection(next, sectionId) === -1) return next
+  if (tileId === "player" && sectionId !== "media") return next
   if (findTile(next, tileId)) return next
   next.sections[findSection(next, sectionId)].tiles.push(tileId)
   return next
@@ -277,6 +303,7 @@ function addTile(layout, tileId, sectionId) {
 
 function removeTile(layout, tileId) {
   var next = normalize(layout)
+  if (tileId === "player") return next
   if (!hasValue(TILE_IDS, tileId)) return next
   var found = findTile(next, tileId)
   if (found) next.sections[found.sectionIndex].tiles.splice(found.tileIndex, 1)
@@ -306,6 +333,7 @@ function renameSection(layout, sectionId, title) {
 
 function removeSection(layout, sectionId) {
   var next = normalize(layout)
+  if (sectionId === "media") return next
   var index = findSection(next, sectionId)
   if (index !== -1) next.sections.splice(index, 1)
   return next
@@ -313,6 +341,7 @@ function removeSection(layout, sectionId) {
 
 function moveSection(layout, sectionId, targetSectionId, after) {
   var next = normalize(layout)
+  if (next.locked) return next
   var sourceIndex = findSection(next, sectionId)
   var targetIndex = findSection(next, targetSectionId)
   if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return next
@@ -365,6 +394,12 @@ function updateAppearance(layout, patch) {
   return next
 }
 
+function setLocked(layout, locked) {
+  var next = normalize(layout)
+  next.locked = locked === true
+  return next
+}
+
 function resetLayout() {
   return defaultLayout()
 }
@@ -390,6 +425,7 @@ if (typeof module !== "undefined" && module.exports) {
     renameSection: renameSection,
     removeSection: removeSection,
     moveSection: moveSection,
+    setLocked: setLocked,
     resizeTile: resizeTile,
     resetTileSize: resetTileSize,
     resetSizes: resetSizes,

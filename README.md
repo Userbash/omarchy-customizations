@@ -109,7 +109,13 @@ A desktop dashboard for weather, CPU/GPU load, temperature, network activity,
 and MPRIS media playback. The dashboard keeps real backend data and separates
 the read-only display from its layout editor.
 
-- Reorder tiles within a section or move them between sections by dragging.
+- Drag sections by their grip and tiles by their card to reorder them or move
+  them between sections. The media player stays in its protected Media section
+  and cannot be moved as an individual tile.
+- Lock and unlock layout movement to prevent accidental drags. Resize tiles
+  with the width and height controls; double-click a tile to restore its
+  default size. The editor fits the standard layout without scrolling and
+  enables scrolling only when added sections exceed the available height.
 - Add, remove, rename, reorder, and reset sections. Add or remove tiles from a
   catalog, resize supported tiles across a two-column grid, and reset a tile's
   size or the complete layout.
@@ -124,7 +130,11 @@ the read-only display from its layout editor.
   central button toggles play/pause; right-click or a long press sends Stop.
 - Adjust the selected MPRIS player's own volume with a slider, mute toggle, and
   small step buttons. Reads and writes use the same player target as the track
-  metadata; the widget does not change the system-wide mixer level.
+  metadata and confirm changes against MPRIS; the widget does not change the
+  system-wide mixer level.
+
+The widget interaction contract and isolated Quickshell/MPRIS end-to-end
+scenario are included in `bash scripts/check.sh` when `quickshell` is installed.
 
 The layout editor and appearance controls are documented in
 [the 26 September change notes](docs/2026-09-26.md).

@@ -7,9 +7,18 @@ Item {
   property string tileId: ""
   property string sectionId: ""
   property var dashboard: null
+  property Item dragLayer: null
   property bool editing: false
   property bool dropTarget: false
   property bool dropAfter: false
+  property bool dragInProgress: false
+  property point dragStartPosition: Qt.point(0, 0)
+  property point dragHotSpot: Qt.point(0, 0)
+  property point dragTranslation: Qt.point(0, 0)
+  property Item pendingDropSectionTarget: null
+  property Item pendingDropTileTarget: null
+  property bool pendingDropAfterTile: false
+  readonly property string dragType: "tile"
 
   readonly property bool isWide: dashboard ? dashboard.tileSize(tileId).columns === 2 : false
   readonly property bool hasMetricLevel: tileId === "cpu" || tileId === "gpu" || tileId === "network"
@@ -17,11 +26,29 @@ Item {
     ? dashboard.cpuLoad
     : tileId === "gpu" ? dashboard.gpuLoad : dashboard.netLoad
 
+  function containsDragPoint(target, x, y) {
+    if (!target || !root.dragLayer) return false
+    var point = target.mapFromItem(root.dragLayer, x, y)
+    return point.x >= 0 && point.y >= 0 && point.x <= target.width && point.y <= target.height
+  }
+
   implicitWidth: 210
   implicitHeight: dashboard ? dashboard.tileHeight(tileId, editing) : 88
-  z: tileDrag.active ? 10 : 0
-  scale: tileDrag.active ? 1.025 : 1
-  opacity: tileDrag.active ? 0.78 : 1
+  z: dragInProgress ? 10 : 0
+  scale: dragInProgress ? 1.025 : 1
+  opacity: dragInProgress ? 0.88 : 1
+  transform: Translate {
+    x: root.dragInProgress ? root.dragTranslation.x : 0
+    y: root.dragInProgress ? root.dragTranslation.y : 0
+    Behavior on x {
+      enabled: !root.dragInProgress
+      NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+    }
+    Behavior on y {
+      enabled: !root.dragInProgress
+      NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+    }
+  }
 
   function metricIcon() {
     if (tileId === "cpu") return "ϟ"
@@ -71,6 +98,11 @@ Item {
     return y >= height / 2
   }
 
+  function canAcceptDrag(source) {
+    if (!source || source === root || source.dragType !== "tile") return false
+    return source.tileId !== "player" || root.sectionId === "media"
+  }
+
   Rectangle {
     id: surface
     anchors.fill: parent
@@ -89,9 +121,67 @@ Item {
     anchors.fill: parent
     anchors.margins: root.isWide ? 16 : 12
     anchors.bottomMargin: root.editing ? 36 : (root.isWide ? 16 : 12)
-    sourceComponent: root.tileId === "weather"
+    sourceComponent: root.editing ? editorContent
+      : root.tileId === "weather"
       ? weatherContent
       : root.tileId === "player" ? playerContent : metricContent
+  }
+
+  Component {
+    id: editorContent
+
+    RowLayout {
+      spacing: 9
+
+      Rectangle {
+        Layout.preferredWidth: 38
+        Layout.preferredHeight: 38
+        radius: 11
+        color: root.tileId === "temperature" ? root.dashboard.warmSurface
+          : root.tileId === "network" ? (root.dashboard.isDark ? "#FF20392F" : "#FFE5F5EC")
+          : root.dashboard.accentSurface
+
+        Text {
+          anchors.centerIn: parent
+          text: root.tileId === "weather" ? "☀" : root.tileId === "player" ? "♫" : root.metricIcon()
+          color: root.tileId === "temperature" ? root.dashboard.warmColor
+            : root.tileId === "network" ? root.dashboard.successColor : root.dashboard.accentColor
+          font.family: root.dashboard.uiFont
+          font.pixelSize: 19
+          font.bold: true
+        }
+      }
+
+      ColumnLayout {
+        Layout.fillWidth: true
+        spacing: 2
+
+        Text {
+          text: root.dashboard.tileLabel(root.tileId, false)
+          color: root.dashboard.primaryText
+          font.family: root.dashboard.uiFont
+          font.pixelSize: 12
+          font.bold: true
+          Layout.fillWidth: true
+          elide: Text.ElideRight
+        }
+
+        Text {
+          text: root.dashboard.tileSize(root.tileId).columns + " × "
+            + root.dashboard.tileSize(root.tileId).rows
+          color: root.dashboard.secondaryText
+          font.family: root.dashboard.uiFont
+          font.pixelSize: 10
+          Layout.fillWidth: true
+        }
+      }
+
+      TapHandler {
+        enabled: root.editing
+        acceptedButtons: Qt.LeftButton
+        onDoubleTapped: root.dashboard.resetTileSize(root.tileId)
+      }
+    }
   }
 
   Component {
@@ -383,6 +473,7 @@ Item {
         MouseArea {
           id: seekMouse
           anchors.fill: parent
+          preventStealing: true
           enabled: !root.dashboard.editing && root.dashboard.durationSeconds > 0
           hoverEnabled: true
           acceptedButtons: Qt.LeftButton
@@ -644,6 +735,7 @@ Item {
             MouseArea {
               id: volumeMouse
               anchors.fill: parent
+              preventStealing: true
               enabled: !root.dashboard.editing && root.dashboard.playerVolumeAvailable
               hoverEnabled: true
               acceptedButtons: Qt.LeftButton
@@ -726,7 +818,7 @@ Item {
           : index === 2 ? size.rows > 1
           : index === 3 ? size.rows < 2
           : index === 4 ? size.columns !== (root.tileId === "weather" || root.tileId === "player" ? 2 : 1) || size.rows !== 1
-          : true
+          : root.tileId !== "player"
         width: 29
         height: 24
         radius: 8
@@ -790,40 +882,95 @@ Item {
 
   DragHandler {
     id: tileDrag
-    enabled: root.editing
+    enabled: root.editing && !root.dashboard.widgetLayout.locked
     target: null
     acceptedButtons: Qt.LeftButton
     cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+    onActiveTranslationChanged: {
+      if (active) root.dragTranslation = activeTranslation
+    }
+    onActiveChanged: {
+      if (active) {
+        if (!root.dragLayer) return
+        root.dragStartPosition = root.mapToItem(root.dragLayer, 0, 0)
+        root.dragTranslation = Qt.point(0, 0)
+        root.dragHotSpot = Qt.point(tileDrag.centroid.position.x, tileDrag.centroid.position.y)
+        root.pendingDropSectionTarget = null
+        root.pendingDropTileTarget = null
+        root.pendingDropAfterTile = false
+        root.dragInProgress = true
+        root.dashboard.draggingItems = true
+      } else if (root.dragInProgress) {
+        var pointX = root.dragStartPosition.x + root.dragTranslation.x + root.dragHotSpot.x
+        var pointY = root.dragStartPosition.y + root.dragTranslation.y + root.dragHotSpot.y
+        var tileTarget = root.pendingDropTileTarget
+        var sectionTarget = root.pendingDropSectionTarget
+        var useTileTarget = root.containsDragPoint(tileTarget, pointX, pointY)
+        var useSectionTarget = !useTileTarget && root.containsDragPoint(sectionTarget, pointX, pointY)
+        var targetSectionId = useTileTarget ? tileTarget.sectionId
+          : useSectionTarget ? sectionTarget.sectionId : ""
+        var targetTileId = useTileTarget ? tileTarget.tileId : ""
+        var targetAfter = useTileTarget ? root.pendingDropAfterTile : true
+        root.pendingDropSectionTarget = null
+        root.pendingDropTileTarget = null
+        root.dragInProgress = false
+        root.dashboard.draggingItems = false
+        if (targetSectionId !== "" && root.tileId !== "player") {
+          root.dashboard.moveTile(root.tileId, targetSectionId, targetTileId, targetAfter)
+        }
+      }
+    }
   }
 
-  Drag.active: tileDrag.active
-  Drag.source: root
-  Drag.keys: ["omarchy-widget-tile"]
-  Drag.hotSpot.x: Math.round(tileDrag.centroid.position.x)
-  Drag.hotSpot.y: Math.round(tileDrag.centroid.position.y)
+  Item {
+    id: dragProxy
+    parent: root.dragLayer
+    x: root.dragStartPosition.x + root.dragTranslation.x
+    y: root.dragStartPosition.y + root.dragTranslation.y
+    width: root.width
+    height: root.height
+    z: 1000
+    opacity: 0.01
+    visible: root.dragInProgress
+
+    Drag.active: root.dragInProgress
+    Drag.source: root
+    Drag.keys: ["omarchy-widget-tile"]
+    Drag.supportedActions: Qt.MoveAction
+    Drag.proposedAction: Qt.MoveAction
+    Drag.hotSpot.x: Math.round(root.dragHotSpot.x)
+    Drag.hotSpot.y: Math.round(root.dragHotSpot.y)
+  }
 
   DropArea {
     id: tileDrop
     anchors.fill: parent
     z: 5
-    enabled: root.editing
+    enabled: root.editing && !root.dashboard.widgetLayout.locked && !root.dragInProgress
     keys: ["omarchy-widget-tile"]
 
     onEntered: function(drop) {
-      if (!drop.source || drop.source === root) return
+      if (!root.canAcceptDrag(drop.source)) return
+      drop.acceptProposedAction()
       root.dropTarget = true
       root.dropAfter = root.insertAfter(drop.x, drop.y)
+      drop.source.pendingDropTileTarget = root
+      drop.source.pendingDropAfterTile = root.dropAfter
     }
     onPositionChanged: function(drop) {
-      if (!drop.source || drop.source === root) return
+      if (!root.canAcceptDrag(drop.source)) return
+      drop.acceptProposedAction()
       root.dropTarget = true
       root.dropAfter = root.insertAfter(drop.x, drop.y)
+      drop.source.pendingDropTileTarget = root
+      drop.source.pendingDropAfterTile = root.dropAfter
     }
     onExited: {
       root.dropTarget = false
     }
     onDropped: function(drop) {
-      if (!drop.source || drop.source === root) return
+      if (!root.canAcceptDrag(drop.source)) return
+      drop.accept(Qt.MoveAction)
       root.dashboard.moveTile(drop.source.tileId, root.sectionId, root.tileId, root.dropAfter)
       root.dropTarget = false
     }
@@ -831,4 +978,12 @@ Item {
 
   Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
   Behavior on opacity { NumberAnimation { duration: 130 } }
+  Behavior on x {
+    enabled: !root.dragInProgress
+    NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+  }
+  Behavior on y {
+    enabled: !root.dragInProgress
+    NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+  }
 }
